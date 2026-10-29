@@ -50,7 +50,11 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #value .caret { display: inline-block; width: 3px; height: 1em; margin: 0 1px; vertical-align: -0.1em;
   background: var(--accent); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
-#reason { color: var(--muted); font-size: 14px; }
+#reason { color: var(--muted); font-size: 14px; text-align: center; }
+/* Appui long sur l'image : ni menu du navigateur, ni sélection, ni loupe. */
+#frame, #frame *, #list img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+#clip { position: absolute; inset: 0; margin: 0 auto; width: 100%; max-width: 640px; z-index: 3;
+  background: #000; border-radius: 4px; }
 #picks { display: flex; gap: 12px; }
 
 #panel { flex: 1; background: var(--panel); position: relative; display: flex; align-items: center;
