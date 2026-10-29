@@ -29,8 +29,9 @@ Les mêmes dans les deux modes :
   - sur l'image, **un point avec un trait vertical par caractère**, placé où le modèle l'a lu, avec le caractère au-dessus :
     - **glisser** un point le déplace ;
     - **appuyer dans le vide** ajoute un point ;
-    - **double appui** sur un point l'efface ;
-  - en dessous, **la valeur**, corrigée au pavé : `0`–`9`, `:`, `.`, `-`, `?` (caractère illisible, en orange), ⌫, « vide » (rien à lire) ;
+    - **toucher** un point le sélectionne (en blanc) et fait apparaître la **poubelle** 🗑 sous l'image : glisser le point dessus l'efface, la toucher efface le point sélectionné ;
+    - **double appui** sur un point l'efface aussi ;
+  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. Le point du caractère juste avant le curseur est souligné sur l'image. Pavé : `0`–`9`, `:`, `.`, `-`, `?` (caractère illisible, en orange), ⌫, « vide » (rien à lire) ;
   - **Valider** n'est possible que si la valeur a **autant de caractères que de points**, et si quelque chose a changé ;
   - **Sans valeur** : faux, sans correction (illisible pour toi aussi). **↶** revient à la paire sans rien juger.
 

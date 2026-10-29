@@ -157,7 +157,7 @@ function positionsOf(pair) {
   return points.map((x) => Math.min(width, Math.max(0, x)));
 }
 
-function drawPoints(points, text, editable) {
+function drawPoints(points, text, editable, marks = {}) {
   const image = $("image");
   const overlay = $("overlay");
   const scale = image.clientWidth / image.naturalWidth;
@@ -167,7 +167,7 @@ function drawPoints(points, text, editable) {
   overlay.innerHTML = editable ? "" : '<div class="middle"></div>';
   points.forEach((x, i) => {
     const point = document.createElement("div");
-    point.className = "pt";
+    point.className = "pt" + (i === marks.selected ? " selected" : "") + (i === marks.current ? " current" : "");
     point.style.left = `${x * scale}px`;
     const c = text[i] ?? "";
     point.innerHTML = `<span class="${c === "?" ? "unknown" : ""}"></span>`;
@@ -279,14 +279,19 @@ function rowGestures(row) {
 
 // ---- Correction (après « faux ») ----
 // Un point avec un trait vertical par caractère : glisser le déplace, un appui dans le vide en
-// ajoute un, un double appui sur un point l'efface. La valeur se tape au pavé ; elle n'est
-// acceptée que si elle a autant de caractères qu'il y a de points.
+// ajoute un, un double appui l'efface, comme le glisser sur la poubelle qui apparaît quand un point
+// est sélectionné. La valeur se corrige au pavé, au curseur ; elle n'est acceptée que si elle a
+// autant de caractères qu'il y a de points.
 
 const GRAB = 20; // px d'écran autour d'un point pour le saisir
 const DOUBLE_TAP = 350; // ms
+const TAP_SLOP = 8; // px : en dessous, un appui qui bouge un peu reste un appui
 
 function openFix(pair) {
-  state.fix = { pair, value: pair.text, points: positionsOf(pair), lastTap: null };
+  state.fix = {
+    pair, value: pair.text, cursor: pair.text.length, points: positionsOf(pair),
+    selected: null, lastTap: null,
+  };
   $("panel").hidden = true;
   $("fix").hidden = false;
   renderFix();
@@ -296,6 +301,7 @@ function closeFix() {
   if (!state.fix) return;
   state.fix = null;
   $("fix").hidden = true;
+  $("trash").hidden = true;
   $("panel").hidden = false;
   $("overlay").classList.remove("editable");
 }
@@ -327,17 +333,27 @@ function fixChanges() {
 }
 
 function renderFix() {
-  const { value, points } = state.fix;
-  drawPoints(points, value, true);
+  const { value, points, cursor, selected } = state.fix;
+  // Point du caractère juste avant le curseur : en évidence.
+  drawPoints(points, value, true, { selected, current: cursor - 1 });
+  $("trash").hidden = selected === null;
   const field = $("value");
   field.innerHTML = "";
-  for (const c of value) {
+  const caret = () => {
+    const bar = document.createElement("span");
+    bar.className = "caret";
+    field.appendChild(bar);
+  };
+  [...value].forEach((c, i) => {
+    if (i === cursor) caret();
     const span = document.createElement("span");
     span.textContent = c;
+    span.dataset.index = i;
     if (c === "?") span.className = "unknown";
     field.appendChild(span);
-  }
-  if (!value) field.innerHTML = '<span class="empty">vide</span>';
+  });
+  if (cursor === value.length) caret();
+  if (!value) field.insertAdjacentHTML("beforeend", '<span class="empty">vide</span>');
   const wrong = fixChanges();
   const counts = value.length === points.length;
   $("fixOk").disabled = !counts || wrong.length === 0;
@@ -350,10 +366,52 @@ function renderFix() {
 
 function key(k) {
   const fix = state.fix;
-  if (k === "⌫") fix.value = fix.value.slice(0, -1);
-  else if (k === "vide") fix.value = "";
-  else if (fix.value.length < 8) fix.value += k;
+  if (k === "⌫") {
+    if (fix.cursor > 0) {
+      fix.value = fix.value.slice(0, fix.cursor - 1) + fix.value.slice(fix.cursor);
+      fix.cursor--;
+    }
+  } else if (k === "vide") {
+    fix.value = "";
+    fix.cursor = 0;
+  } else if (fix.value.length < 8) {
+    fix.value = fix.value.slice(0, fix.cursor) + k + fix.value.slice(fix.cursor);
+    fix.cursor++;
+  }
   renderFix();
+}
+
+// Toucher un caractère place le curseur juste après lui ; à gauche du premier : au début.
+function valueGestures() {
+  $("value").addEventListener("click", (e) => {
+    const fix = state.fix;
+    if (!fix) return;
+    const span = e.target.closest("span[data-index]");
+    if (span) {
+      const rect = span.getBoundingClientRect();
+      const index = Number(span.dataset.index);
+      fix.cursor = e.clientX < rect.left + rect.width / 2 ? index : index + 1;
+    } else {
+      const first = $("value").querySelector("span[data-index]");
+      fix.cursor = first && e.clientX < first.getBoundingClientRect().left ? 0 : fix.value.length;
+    }
+    renderFix();
+  });
+}
+
+function deletePoint(index) {
+  const fix = state.fix;
+  fix.points.splice(index, 1);
+  fix.selected = null;
+  fix.lastTap = null;
+  renderFix();
+}
+
+function overTrash(e) {
+  const trash = $("trash");
+  if (trash.hidden) return false;
+  const r = trash.getBoundingClientRect();
+  return e.clientX >= r.left - 10 && e.clientX <= r.right + 10 && e.clientY >= r.top - 10 && e.clientY <= r.bottom + 10;
 }
 
 function overlayGestures() {
@@ -366,48 +424,76 @@ function overlayGestures() {
     return { x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / scale)), scale };
   };
   overlay.addEventListener("pointerdown", (e) => {
-    if (!state.fix) return;
+    const fix = state.fix;
+    if (!fix) return;
+    e.stopPropagation(); // pas jusqu'au haut de l'écran, qui désélectionnerait le point
     const { x, scale } = imageX(e);
-    const points = state.fix.points;
+    const points = fix.points;
     let nearest = -1;
     points.forEach((p, i) => {
       if (Math.abs(p - x) * scale <= GRAB && (nearest < 0 || Math.abs(p - x) < Math.abs(points[nearest] - x))) nearest = i;
     });
     const now = Date.now();
-    const last = state.fix.lastTap;
-    if (nearest >= 0 && last && last.index === nearest && now - last.at < DOUBLE_TAP) {
-      points.splice(nearest, 1); // double appui : effacé
-      state.fix.lastTap = null;
-      renderFix();
-      return;
-    }
+    const last = fix.lastTap;
+    // Second appui sur le même point : effacé au relâcher, s'il n'a pas glissé entre-temps.
+    const second = nearest >= 0 && last && last.index === nearest && now - last.at < DOUBLE_TAP;
+    let added = false;
     if (nearest < 0) {
       points.push(x); // appui dans le vide : ajouté
       points.sort((a, b) => a - b);
       nearest = points.indexOf(x);
+      added = true;
     }
-    state.fix.lastTap = { index: nearest, at: now };
-    drag = { index: nearest };
+    fix.selected = nearest;
+    drag = { index: nearest, startX: e.clientX, moved: false, added, second };
     overlay.setPointerCapture(e.pointerId);
     renderFix();
   });
   overlay.addEventListener("pointermove", (e) => {
-    if (!drag || !state.fix) return;
-    const points = state.fix.points;
+    const fix = state.fix;
+    if (!drag || !fix) return;
+    if (!drag.moved && Math.abs(e.clientX - drag.startX) < TAP_SLOP) return; // tremblement du doigt
+    drag.moved = true;
+    const points = fix.points;
     points[drag.index] = imageX(e).x;
     const moved = points[drag.index];
     points.sort((a, b) => a - b);
     drag.index = points.indexOf(moved);
-    state.fix.lastTap = null; // un glissé n'est pas un appui
+    fix.selected = drag.index;
     renderFix();
+    $("trash").classList.toggle("hot", overTrash(e));
   });
-  const release = () => { drag = null; };
+  const release = (e) => {
+    const fix = state.fix;
+    if (!drag || !fix) return;
+    $("trash").classList.remove("hot");
+    if (drag.moved && e.type === "pointerup" && overTrash(e)) {
+      deletePoint(drag.index); // glissé sur la poubelle : effacé
+    } else if (!drag.moved && drag.second && e.type === "pointerup") {
+      deletePoint(drag.index); // double appui : effacé
+    } else {
+      // Un appui (sans glissé) sur un point existant peut être le premier d'un double appui.
+      fix.lastTap = drag.moved || drag.added ? null : { index: drag.index, at: Date.now() };
+    }
+    drag = null;
+  };
   overlay.addEventListener("pointerup", release);
   overlay.addEventListener("pointercancel", release);
+  // Toucher ailleurs dans le haut de l'écran : plus de point sélectionné.
+  $("top").addEventListener("pointerdown", (e) => {
+    if (!state.fix || e.target.id === "trash") return;
+    state.fix.selected = null;
+    renderFix();
+  });
+  // Poubelle touchée : efface le point sélectionné.
+  $("trash").addEventListener("click", () => {
+    if (state.fix && state.fix.selected !== null) deletePoint(state.fix.selected);
+  });
 }
 
 function fixWiring() {
   overlayGestures();
+  valueGestures();
   for (const k of ["1", "2", "3", "4", "5", "6", "7", "8", "9", ":", "0", ".", "-", "?", "⌫", "vide"]) {
     const b = document.createElement("button");
     b.type = "button";

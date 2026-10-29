@@ -39,6 +39,15 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #overlay .pt span.unknown, #value .unknown, #keypad .unknown { color: var(--unknown); }
 #overlay .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px; }
 #overlay .middle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #fff8; }
+#trash { position: absolute; right: 0; bottom: -60px; z-index: 2; font-size: 26px; padding: 8px 12px;
+  background: #2a2a2a; border: 2px solid transparent; }
+#trash.hot { background: var(--wrong); border-color: #fff; }
+#overlay .pt.selected { background: #fff; width: 3px; }
+#overlay .pt.selected::after { background: #fff; }
+#overlay .pt.current span { text-decoration: underline; }
+#value .caret { display: inline-block; width: 3px; height: 1em; margin: 0 1px; vertical-align: -0.1em;
+  background: var(--accent); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
 #reason { color: var(--muted); font-size: 14px; }
 #picks { display: flex; gap: 12px; }
 
