@@ -88,8 +88,10 @@ function useQueue(queue, demo) {
 function pending() { return state.queue.pairs.filter((p) => !state.judgments[p.id]); }
 
 function judge(pair, verdict, extra = {}) {
+  // Juste : les boîtes proposées sont validées avec le texte.
+  const boxes = verdict === "ok" && pair.boxes ? { boxes: roundBoxes(pair.boxes) } : {};
   state.judgments[pair.id] = {
-    id: pair.id, text: pair.text, verdict, ...extra, at: new Date().toISOString(),
+    id: pair.id, text: pair.text, verdict, ...boxes, ...extra, at: new Date().toISOString(),
   };
   state.history.push(pair.id);
   store.set(judgmentsKey(), state.judgments);
@@ -146,18 +148,27 @@ function reveal() {
   const scale = image.clientWidth / image.naturalWidth;
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
-  drawPoints(positionsOf(pair), pair.text, false);
+  drawBoxes(boxesOf(pair), pair.text, false);
 }
 
-// Position (pixels de l'image) de chaque caractère : celles du modèle, ou le milieu des rectangles
-// des anciennes files.
-function positionsOf(pair) {
-  const width = $("image").naturalWidth || Infinity;
-  const points = pair.positions || (pair.boxes || []).map(([x0, , x1]) => (x0 + x1) / 2);
-  return points.map((x) => Math.min(width, Math.max(0, x)));
+// Boîte de chaque caractère, [x0, y0, x1, y1] en pixels de l'image (coins haut-gauche et
+// bas-droite) : celles du modèle ; anciennes files avec des positions seules : un trait.
+function boxesOf(pair) {
+  const image = $("image");
+  const w = image.naturalWidth || Infinity;
+  const h = image.naturalHeight || Infinity;
+  const boxes = pair.boxes || (pair.positions || []).map((x) => [x - 1, 0, x + 1, h]);
+  return boxes.map(([x0, y0, x1, y1]) => [
+    Math.min(w, Math.max(0, x0)), Math.min(h, Math.max(0, y0)),
+    Math.min(w, Math.max(0, x1)), Math.min(h, Math.max(0, y1)),
+  ]);
 }
 
-function drawPoints(points, text, editable, marks = {}) {
+function roundBoxes(boxes) {
+  return boxes.map((b) => b.map((v) => Math.round(v * 10) / 10));
+}
+
+function drawBoxes(boxes, text, editable, marks = {}) {
   const image = $("image");
   const overlay = $("overlay");
   const scale = image.clientWidth / image.naturalWidth;
@@ -165,14 +176,18 @@ function drawPoints(points, text, editable, marks = {}) {
   overlay.style.height = `${image.clientHeight}px`;
   overlay.classList.toggle("editable", editable);
   overlay.innerHTML = editable ? "" : '<div class="middle"></div>';
-  points.forEach((x, i) => {
-    const point = document.createElement("div");
-    point.className = "pt" + (i === marks.selected ? " selected" : "") + (i === marks.current ? " current" : "");
-    point.style.left = `${x * scale}px`;
+  boxes.forEach(([x0, y0, x1, y1], i) => {
+    const box = document.createElement("div");
+    box.className = "box" + (i === marks.selected ? " selected" : "") + (i === marks.current ? " current" : "");
+    box.style.left = `${x0 * scale}px`;
+    box.style.top = `${y0 * scale}px`;
+    box.style.width = `${(x1 - x0) * scale}px`;
+    box.style.height = `${(y1 - y0) * scale}px`;
     const c = text[i] ?? "";
-    point.innerHTML = `<span class="${c === "?" ? "unknown" : ""}"></span>`;
-    point.firstChild.textContent = c;
-    overlay.appendChild(point);
+    box.innerHTML = `<span class="${c === "?" ? "unknown" : ""}"></span>`
+      + (editable ? '<i class="corner tl"></i><i class="corner br"></i>' : "");
+    box.firstChild.textContent = c;
+    overlay.appendChild(box);
   });
 }
 
@@ -278,18 +293,19 @@ function rowGestures(row) {
 }
 
 // ---- Correction (après « faux ») ----
-// Un point avec un trait vertical par caractère : glisser le déplace, un appui dans le vide en
-// ajoute un, un double appui l'efface, comme le glisser sur la poubelle qui apparaît quand un point
-// est sélectionné. La valeur se corrige au pavé, au curseur ; elle n'est acceptée que si elle a
-// autant de caractères qu'il y a de points.
+// Une boîte par caractère (coins haut-gauche et bas-droite) : glisser un coin la redimensionne,
+// glisser l'intérieur la déplace, un appui dans le vide en ajoute une (taille des autres), un
+// double appui l'efface, comme le glisser sur la poubelle qui apparaît quand une boîte est
+// sélectionnée. La valeur se corrige au pavé, au curseur ; elle n'est acceptée que si elle a
+// autant de caractères qu'il y a de boîtes.
 
-const GRAB = 20; // px d'écran autour d'un point pour le saisir
+const GRAB = 20; // px d'écran autour d'un coin pour le saisir
 const DOUBLE_TAP = 350; // ms
 const TAP_SLOP = 8; // px : en dessous, un appui qui bouge un peu reste un appui
 
 function openFix(pair) {
   state.fix = {
-    pair, value: pair.text, cursor: pair.text.length, points: positionsOf(pair),
+    pair, value: pair.text, cursor: pair.text.length, boxes: boxesOf(pair),
     selected: null, lastTap: null,
   };
   $("panel").hidden = true;
@@ -322,20 +338,19 @@ function finishFix() {
 }
 
 function fixChanges() {
-  const { pair, value, points } = state.fix;
-  const before = positionsOf(pair);
+  const { pair, value, boxes } = state.fix;
+  const before = boxesOf(pair);
   const wrong = [];
   if (value !== pair.text) wrong.push("value");
-  if (points.length !== before.length || points.some((x, i) => Math.abs(x - before[i]) > 0.5)) {
-    wrong.push("positions");
-  }
+  const moved = (b, i) => b.some((v, k) => Math.abs(v - before[i][k]) > 0.5);
+  if (boxes.length !== before.length || boxes.some(moved)) wrong.push("boxes");
   return wrong;
 }
 
 function renderFix() {
-  const { value, points, cursor, selected } = state.fix;
-  // Point du caractère juste avant le curseur : en évidence.
-  drawPoints(points, value, true, { selected, current: cursor - 1 });
+  const { value, boxes, cursor, selected } = state.fix;
+  // Boîte du caractère juste avant le curseur : en évidence.
+  drawBoxes(boxes, value, true, { selected, current: cursor - 1 });
   $("trash").hidden = selected === null;
   const field = $("value");
   field.innerHTML = "";
@@ -355,13 +370,13 @@ function renderFix() {
   if (cursor === value.length) caret();
   if (!value) field.insertAdjacentHTML("beforeend", '<span class="empty">vide</span>');
   const wrong = fixChanges();
-  const counts = value.length === points.length;
+  const counts = value.length === boxes.length;
   $("fixOk").disabled = !counts || wrong.length === 0;
   $("fixHint").textContent = !counts
-    ? `${value.length} caractère(s) pour ${points.length} point(s)`
+    ? `${value.length} caractère(s) pour ${boxes.length} boîte(s)`
     : wrong.length === 0
-      ? "Corrige la valeur ou les points, ou choisis « Sans valeur »"
-      : `Corrigé : ${wrong.map((w) => (w === "value" ? "valeur" : "positions")).join(" et ")}`;
+      ? "Corrige la valeur ou les boîtes, ou choisis « Sans valeur »"
+      : `Corrigé : ${wrong.map((w) => (w === "value" ? "valeur" : "boîtes")).join(" et ")}`;
 }
 
 function key(k) {
@@ -399,9 +414,9 @@ function valueGestures() {
   });
 }
 
-function deletePoint(index) {
+function deleteBox(index) {
   const fix = state.fix;
-  fix.points.splice(index, 1);
+  fix.boxes.splice(index, 1);
   fix.selected = null;
   fix.lastTap = null;
   renderFix();
@@ -414,52 +429,99 @@ function overTrash(e) {
   return e.clientX >= r.left - 10 && e.clientX <= r.right + 10 && e.clientY >= r.top - 10 && e.clientY <= r.bottom + 10;
 }
 
+// Boîtes rangées de gauche à droite (ordre des caractères) ; renvoie la nouvelle place de `box`.
+function sortBoxes(boxes, box) {
+  boxes.sort((a, b) => a[0] + a[2] - (b[0] + b[2]));
+  return boxes.indexOf(box);
+}
+
+// Nouvelle boîte autour du point touché : taille et hauteur médianes des autres boîtes, sinon
+// un caractère étroit sur 80 % de la hauteur.
+function newBox(x, y) {
+  const image = $("image");
+  const h = image.naturalHeight;
+  const others = state.fix.boxes;
+  const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  const width = others.length ? median(others.map((b) => b[2] - b[0])) : h * 0.5;
+  const top = others.length ? median(others.map((b) => b[1])) : h * 0.1;
+  const bottom = others.length ? median(others.map((b) => b[3])) : h * 0.9;
+  const x0 = Math.min(image.naturalWidth - width, Math.max(0, x - width / 2));
+  return [x0, top, x0 + width, bottom];
+}
+
 function overlayGestures() {
   const overlay = $("overlay");
   let drag = null;
-  const imageX = (e) => {
+  const imagePoint = (e) => {
     const image = $("image");
     const rect = image.getBoundingClientRect();
     const scale = image.clientWidth / image.naturalWidth;
-    return { x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / scale)), scale };
+    return {
+      x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / scale)),
+      y: Math.min(image.naturalHeight, Math.max(0, (e.clientY - rect.top) / scale)),
+      scale,
+    };
   };
   overlay.addEventListener("pointerdown", (e) => {
     const fix = state.fix;
     if (!fix) return;
-    e.stopPropagation(); // pas jusqu'au haut de l'écran, qui désélectionnerait le point
-    const { x, scale } = imageX(e);
-    const points = fix.points;
-    let nearest = -1;
-    points.forEach((p, i) => {
-      if (Math.abs(p - x) * scale <= GRAB && (nearest < 0 || Math.abs(p - x) < Math.abs(points[nearest] - x))) nearest = i;
+    e.stopPropagation(); // pas jusqu'au haut de l'écran, qui désélectionnerait la boîte
+    const { x, y, scale } = imagePoint(e);
+    const boxes = fix.boxes;
+    // Le coin le plus proche (haut-gauche ou bas-droite), sinon la boîte touchée.
+    let grab = null;
+    let best = GRAB;
+    boxes.forEach((b, i) => {
+      for (const [corner, cx, cy] of [["tl", b[0], b[1]], ["br", b[2], b[3]]]) {
+        const d = Math.hypot(cx - x, cy - y) * scale;
+        if (d <= best) {
+          best = d;
+          grab = { index: i, corner };
+        }
+      }
     });
+    if (!grab) {
+      const inside = boxes.findIndex((b) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]);
+      if (inside >= 0) grab = { index: inside, corner: "move" };
+    }
     const now = Date.now();
     const last = fix.lastTap;
-    // Second appui sur le même point : effacé au relâcher, s'il n'a pas glissé entre-temps.
-    const second = nearest >= 0 && last && last.index === nearest && now - last.at < DOUBLE_TAP;
+    // Second appui sur la même boîte : effacée au relâcher, si elle n'a pas glissé entre-temps.
+    const second = grab && last && last.index === grab.index && now - last.at < DOUBLE_TAP;
     let added = false;
-    if (nearest < 0) {
-      points.push(x); // appui dans le vide : ajouté
-      points.sort((a, b) => a - b);
-      nearest = points.indexOf(x);
+    if (!grab) {
+      const box = newBox(x, y); // appui dans le vide : ajoutée
+      boxes.push(box);
+      grab = { index: sortBoxes(boxes, box), corner: "move" };
       added = true;
     }
-    fix.selected = nearest;
-    drag = { index: nearest, startX: e.clientX, moved: false, added, second };
+    fix.selected = grab.index;
+    drag = {
+      ...grab, box: boxes[grab.index], start: [...boxes[grab.index]], x, y,
+      startX: e.clientX, startY: e.clientY, moved: false, added, second,
+    };
     overlay.setPointerCapture(e.pointerId);
     renderFix();
   });
   overlay.addEventListener("pointermove", (e) => {
     const fix = state.fix;
     if (!drag || !fix) return;
-    if (!drag.moved && Math.abs(e.clientX - drag.startX) < TAP_SLOP) return; // tremblement du doigt
+    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < TAP_SLOP) return;
     drag.moved = true;
-    const points = fix.points;
-    points[drag.index] = imageX(e).x;
-    const moved = points[drag.index];
-    points.sort((a, b) => a - b);
-    drag.index = points.indexOf(moved);
-    fix.selected = drag.index;
+    const image = $("image");
+    const { x, y } = imagePoint(e);
+    const [x0, y0, x1, y1] = drag.start;
+    const box = drag.box;
+    if (drag.corner === "tl") {
+      box.splice(0, 4, Math.min(x, x1 - 1), Math.min(y, y1 - 1), x1, y1);
+    } else if (drag.corner === "br") {
+      box.splice(0, 4, x0, y0, Math.max(x, x0 + 1), Math.max(y, y0 + 1));
+    } else {
+      const dx = Math.min(image.naturalWidth - x1, Math.max(-x0, x - drag.x));
+      const dy = Math.min(image.naturalHeight - y1, Math.max(-y0, y - drag.y));
+      box.splice(0, 4, x0 + dx, y0 + dy, x1 + dx, y1 + dy);
+    }
+    fix.selected = sortBoxes(fix.boxes, box);
     renderFix();
     $("trash").classList.toggle("hot", overTrash(e));
   });
@@ -467,27 +529,28 @@ function overlayGestures() {
     const fix = state.fix;
     if (!drag || !fix) return;
     $("trash").classList.remove("hot");
+    const index = fix.boxes.indexOf(drag.box);
     if (drag.moved && e.type === "pointerup" && overTrash(e)) {
-      deletePoint(drag.index); // glissé sur la poubelle : effacé
+      deleteBox(index); // glissée sur la poubelle : effacée
     } else if (!drag.moved && drag.second && e.type === "pointerup") {
-      deletePoint(drag.index); // double appui : effacé
+      deleteBox(index); // double appui : effacée
     } else {
-      // Un appui (sans glissé) sur un point existant peut être le premier d'un double appui.
-      fix.lastTap = drag.moved || drag.added ? null : { index: drag.index, at: Date.now() };
+      // Un appui (sans glissé) sur une boîte existante peut être le premier d'un double appui.
+      fix.lastTap = drag.moved || drag.added ? null : { index, at: Date.now() };
     }
     drag = null;
   };
   overlay.addEventListener("pointerup", release);
   overlay.addEventListener("pointercancel", release);
-  // Toucher ailleurs dans le haut de l'écran : plus de point sélectionné.
+  // Toucher ailleurs dans le haut de l'écran : plus de boîte sélectionnée.
   $("top").addEventListener("pointerdown", (e) => {
     if (!state.fix || e.target.id === "trash") return;
     state.fix.selected = null;
     renderFix();
   });
-  // Poubelle touchée : efface le point sélectionné.
+  // Poubelle touchée : efface la boîte sélectionnée.
   $("trash").addEventListener("click", () => {
-    if (state.fix && state.fix.selected !== null) deletePoint(state.fix.selected);
+    if (state.fix && state.fix.selected !== null) deleteBox(state.fix.selected);
   });
 }
 
@@ -503,15 +566,13 @@ function fixWiring() {
     $("keypad").appendChild(b);
   }
   $("fixOk").onclick = () => {
-    const { pair, value, points } = state.fix;
+    const { pair, value, boxes } = state.fix;
     const wrong = fixChanges();
-    judge(pair, "wrong", {
-      correct: value, positions: points.map((x) => Math.round(x * 10) / 10), wrong,
-    });
+    judge(pair, "wrong", { correct: value, boxes: roundBoxes(boxes), wrong });
     finishFix();
   };
   $("fixNone").onclick = () => {
-    judge(state.fix.pair, "wrong", { correct: null, positions: null, wrong: [] });
+    judge(state.fix.pair, "wrong", { correct: null, boxes: null, wrong: [] });
     finishFix();
   };
   $("fixCancel").onclick = () => {

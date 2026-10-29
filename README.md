@@ -23,19 +23,20 @@ Les mêmes dans les deux modes :
 | ← gauche | faux |
 | → droite | je ne sais pas |
 
-- **Écran partagé** (par défaut). En haut, l'image, avec deux boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, les rectangles sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
+- **Écran partagé** (par défaut). En haut, l'image, avec deux boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, la boîte de chaque caractère sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
 - **Liste** (bouton ≡ / ▣). Les paires défilent vers le haut : une paire qui sort par le haut sans geste est **juste**. On pousse une ligne à gauche (fausse) ou à droite (je ne sais pas).
 - **Faux → correction.** Une paire jugée fausse (glissée à gauche, en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
-  - sur l'image, **un point avec un trait vertical par caractère**, placé où le modèle l'a lu, avec le caractère au-dessus :
-    - **glisser** un point le déplace ;
-    - **appuyer dans le vide** ajoute un point ;
-    - **toucher** un point le sélectionne (en blanc) et fait apparaître la **poubelle** 🗑 sous l'image : glisser le point dessus l'efface, la toucher efface le point sélectionné ;
-    - **double appui** sur un point l'efface aussi ;
-  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. Le point du caractère juste avant le curseur est souligné sur l'image. Pavé : `0`–`9`, `:`, `.`, `-`, `?` (caractère illisible, en orange), ⌫, « vide » (rien à lire) ;
-  - **Valider** n'est possible que si la valeur a **autant de caractères que de points**, et si quelque chose a changé ;
+  - sur l'image, **une boîte par caractère** (rectangle qui l'englobe, coins haut-gauche et bas-droite), proposée par le modèle, avec le caractère au-dessus ; on ne corrige que les fausses :
+    - **glisser un coin** (rond bleu) redimensionne la boîte ;
+    - **glisser l'intérieur** déplace la boîte ;
+    - **appuyer dans le vide** ajoute une boîte, de la taille des autres, à ajuster ;
+    - **toucher** une boîte la sélectionne (en blanc) et fait apparaître la **poubelle** 🗑 sous l'image : glisser la boîte dessus l'efface, la toucher efface la boîte sélectionnée ;
+    - **double appui** sur une boîte l'efface aussi ;
+  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. La boîte du caractère juste avant le curseur a son caractère souligné. Pavé : `0`–`9`, `:`, `.`, `-`, `?` (caractère illisible, en orange), ⌫, « vide » (rien à lire) ;
+  - **Valider** n'est possible que si la valeur a **autant de caractères que de boîtes**, et si quelque chose a changé ;
   - **Sans valeur** : faux, sans correction (illisible pour toi aussi). **↶** revient à la paire sans rien juger.
 
-  L'app déduit ce qui était faux de ce qui a changé : la valeur, les positions, ou les deux.
+  L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
 - **↶** (en haut) annule le dernier jugement.
 - À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là.
 
@@ -52,7 +53,7 @@ Les mêmes dans les deux modes :
       "id": "video-demo-1_tableau-complet/game_clock/13600",
       "image": "data:image/png;base64,…",
       "text": "413",
-      "positions": [18.5, 31.0, 40.2, 52.7],
+      "boxes": [[12.0, 3.5, 24.0, 28.5], [27.5, 9.0, 31.0, 23.0], [34.0, 3.5, 46.5, 28.5]],
       "confidence": 0.85,
       "reason": "désaccord"
     }
@@ -60,7 +61,7 @@ Les mêmes dans les deux modes :
 }
 ```
 
-`positions` : abscisse de chaque caractère, en pixels de l'image. Les anciennes files donnent à la place `boxes` (rectangles `[x0, y0, x1, y1]`) ; l'app en prend le milieu.
+`boxes` : boîte de chaque caractère, `[x0, y0, x1, y1]` en pixels de l'image (coins haut-gauche et bas-droite). Les anciennes files donnent à la place `positions` (abscisse de chaque caractère) ; l'app en fait des boîtes étroites sur toute la hauteur.
 
 Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 1. désaccord entre le modèle et l'étiquette ;
@@ -72,15 +73,15 @@ Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 
 ```json
 [
-  { "id": "…", "text": "4:13", "verdict": "ok", "at": "2026-10-29T08:00:00Z" },
+  { "id": "…", "text": "4:13", "verdict": "ok", "boxes": [[…], …], "at": "2026-10-29T08:00:00Z" },
   { "id": "…", "text": "4:13", "verdict": "wrong", "correct": "1:41",
-    "positions": [6.0, 20.5, 31.0, 44.5], "wrong": ["value"], "at": "…" }
+    "boxes": [[2.0, 3.5, 9.0, 28.5], …], "wrong": ["value", "boxes"], "at": "…" }
 ]
 ```
 
 `verdict` vaut `ok` (juste), `wrong` (faux) ou `unknown` (je ne sais pas).
-- Une paire juste devient une étiquette pour l'entraînement suivant.
-- Une paire fausse **corrigée** (`correct`, avec les `positions`) donne l'étiquette juste. Une paire fausse sans valeur (`correct` à `null`) retire l'étiquette de cet échantillon.
+- Une paire juste devient une étiquette pour l'entraînement suivant, avec ses boîtes.
+- Une paire fausse **corrigée** (`correct`, avec les `boxes`) donne l'étiquette juste et les boîtes justes. Une paire fausse sans valeur (`correct` à `null`) retire l'étiquette de cet échantillon.
 
 ## Développement
 
