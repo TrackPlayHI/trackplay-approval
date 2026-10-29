@@ -290,31 +290,61 @@ function renderList() {
       const above = entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0);
       if (!entry.isIntersecting && above && !state.judgments[pair.id]) {
         judge(pair, "ok");
-        entry.target.classList.add("ok");
+        fillRow(entry.target);
       }
     }
   }, { root: list });
   for (const pair of state.queue.pairs) {
     const row = document.createElement("div");
-    row.className = "row " + (state.judgments[pair.id]?.verdict || "");
     row.pair = pair;
-    row.innerHTML = `<div class="shot"><img alt="" draggable="false"></div><span class="text"></span>`;
+    row.innerHTML = `<div class="shot"><img alt="" draggable="false"></div><span class="text"></span>`
+      + '<span class="mark"></span>';
     const img = row.querySelector("img");
-    img.onload = () => rowBoxes(row.querySelector(".shot"), img, pair);
+    img.onload = () => fillRow(row);
     img.src = pair.image;
-    row.querySelector(".text").textContent = pair.text;
+    fillRow(row);
     rowGestures(row);
     list.appendChild(row);
     observer.observe(row);
   }
 }
 
+// Ce que montre une ligne : avant jugement, la lecture du modèle ; jugée, ce qui a été validé
+// (juste : la lecture ; corrigée : la correction ; sans valeur : rien) et une marque en bas à droite :
+// ✓ vert (juste, ou « corrigé »), ✗ rouge (sans valeur), ? gris (je ne sais pas).
+function fillRow(row) {
+  const pair = row.pair;
+  const j = state.judgments[pair.id];
+  let text = pair.text;
+  let boxes = pair.boxes;
+  let mark = "";
+  let note = "";
+  if (j?.verdict === "ok") {
+    mark = "✓";
+  } else if (j?.verdict === "wrong" && j.correct != null) {
+    [text, boxes, mark, note] = [j.correct, j.boxes, "✓", "corrigé"];
+  } else if (j?.verdict === "wrong") {
+    [text, boxes, mark, note] = ["—", [], "✗", "sans valeur"];
+  } else if (j?.verdict === "unknown") {
+    mark = "?";
+  }
+  row.className = `row ${j?.verdict || ""}`;
+  row.querySelector(".text").textContent = text;
+  const markEl = row.querySelector(".mark");
+  markEl.textContent = mark;
+  markEl.dataset.note = note;
+  markEl.className = `mark ${j?.verdict || ""}`;
+  const shot = row.querySelector(".shot");
+  shot.querySelectorAll(".box").forEach((b) => b.remove());
+  rowBoxes(shot, row.querySelector("img"), boxes);
+}
+
 // Boîtes des caractères sur l'image d'une ligne (en pourcentage : elles suivent la taille de l'image).
-function rowBoxes(shot, img, pair) {
+function rowBoxes(shot, img, boxes) {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
-  if (!w || !h || !pair.boxes) return;
-  for (const [x0, y0, x1, y1] of pair.boxes) {
+  if (!w || !h || !boxes) return;
+  for (const [x0, y0, x1, y1] of boxes) {
     const box = document.createElement("div");
     box.className = "box";
     box.style.left = `${(Math.max(0, x0) / w) * 100}%`;
@@ -345,8 +375,9 @@ function rowGestures(row) {
     const verdict = e.type === "pointerup" ? direction(dx, dy) : null;
     if (verdict === "unknown") {
       judge(row.pair, verdict);
-      row.className = `row ${verdict}`;
+      fillRow(row);
     } else if (verdict === "wrong") {
+      // Faux, même sur une ligne déjà jugée : la correction repart de la lecture d'origine.
       state.listScroll = $("list").scrollTop;
       $("list").hidden = true;
       $("split").hidden = false;
@@ -626,7 +657,8 @@ function overlayGestures() {
 function fixWiring() {
   overlayGestures();
   valueGestures();
-  for (const k of ["1", "2", "3", "4", "5", "6", "7", "8", "9", ":", "0", ".", "-", "?", "⌫", "vide"]) {
+  // Pavé de téléphone, séparateurs à droite.
+  for (const k of ["1", "2", "3", "-", "4", "5", "6", ":", "7", "8", "9", ".", "?", "0", "⌫", "vide"]) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = k;

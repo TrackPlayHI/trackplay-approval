@@ -93,7 +93,15 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 .row img { width: 100%; image-rendering: pixelated; border-radius: 4px; }
 .row .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px; box-sizing: border-box;
   pointer-events: none; }
+.row { position: relative; }
 .row .text { flex: 1; text-align: center; font-size: 32px; font-weight: 700; }
+/* Marque du jugement, en bas à droite : ✓ vert (et « corrigé »), ✗ rouge, ? gris. */
+.row .mark { position: absolute; right: 12px; bottom: 6px; font-size: 22px; font-weight: 700; }
+.row .mark::before { content: attr(data-note); font-size: 12px; font-weight: 400; color: var(--muted);
+  margin-right: 6px; }
+.row .mark.ok, .row .mark.wrong:not([data-note="sans valeur"]) { color: var(--ok); }
+.row .mark[data-note="sans valeur"] { color: var(--wrong); }
+.row .mark.unknown { color: var(--muted); }
 .row.ok { border-left: 6px solid var(--ok); }
 .row.wrong { border-left: 6px solid var(--wrong); }
 .row.unknown { border-left: 6px solid var(--unknown); }
