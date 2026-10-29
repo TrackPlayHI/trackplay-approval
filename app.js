@@ -37,6 +37,7 @@ async function github(path, options = {}) {
     },
   });
   if (!response.ok) throw new Error(`GitHub ${response.status} : ${(await response.text()).slice(0, 120)}`);
+  if (options.blob) return response.blob();
   return options.raw ? response.text() : response.json();
 }
 
@@ -123,7 +124,52 @@ function updateProgress() {
 
 // ---- Écran partagé ----
 
+// Noms des champs du tableau, pour dire d'où vient la paire.
+const FIELDS = {
+  home: "Score loc.", away: "Score vis.", score_home: "Score loc.", score_away: "Score vis.",
+  game_clock: "Temps de jeu", period: "Période", fouls_home: "Fautes loc.", fouls_away: "Fautes vis.",
+  timeouts_home: "Temps-morts loc.", timeouts_away: "Temps-morts vis.",
+};
+
+// « BCNA Geispolsheim · Temps de jeu · 20:55 » : salle, champ, moment dans la vidéo.
+function whereText(pair) {
+  const w = pair.where;
+  if (!w) return "";
+  const s = Math.floor(w.time_s);
+  const time = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return `${w.hall} · ${FIELDS[w.field] || w.field} · ${time}`;
+}
+
+// Clip de contexte (±3 s autour de l'image, champ encadré) : joué en boucle à la place de l'image,
+// un appui le referme.
+async function playContext(pair) {
+  if (!pair?.clip) return;
+  const clip = $("clip");
+  try {
+    const blob = state.demo
+      ? await (await fetch(`sample/${pair.clip}`)).blob()
+      : await github(`contents/queues/${pair.clip}`, { raw: true, blob: true });
+    if (clip.src) URL.revokeObjectURL(clip.src);
+    clip.src = URL.createObjectURL(blob);
+    clip.hidden = false;
+    $("overlay").hidden = true;
+    await clip.play();
+  } catch (error) {
+    closeContext();
+    toast(`Contexte indisponible : ${error.message}`);
+  }
+}
+
+function closeContext() {
+  const clip = $("clip");
+  if (clip.hidden) return;
+  clip.pause();
+  clip.hidden = true;
+  $("overlay").hidden = false;
+}
+
 function show(pair) {
+  closeContext();
   state.current = pair || null;
   $("panel").className = "";
   $("answer").textContent = "";
@@ -134,7 +180,9 @@ function show(pair) {
     return;
   }
   $("image").src = pair.image;
-  $("reason").textContent = `${pair.reason || ""} · confiance ${Math.round(pair.confidence * 100)} %`;
+  $("reason").textContent = [pair.reason, `confiance ${Math.round(pair.confidence * 100)} %`, whereText(pair)]
+    .filter(Boolean).join(" · ");
+  $("context").hidden = !pair.clip;
 }
 
 function next() { show(pending()[0]); }
@@ -304,6 +352,8 @@ const DOUBLE_TAP = 350; // ms
 const TAP_SLOP = 8; // px : en dessous, un appui qui bouge un peu reste un appui
 
 function openFix(pair) {
+  closeContext();
+  $("context").hidden = !pair.clip;
   state.fix = {
     pair, value: pair.text, cursor: pair.text.length, boxes: boxesOf(pair),
     selected: null, lastTap: null,
@@ -315,6 +365,7 @@ function openFix(pair) {
 
 function closeFix() {
   if (!state.fix) return;
+  closeContext();
   state.fix = null;
   $("fix").hidden = true;
   $("trash").hidden = true;
@@ -650,10 +701,14 @@ function wire() {
     show(left[Math.floor(Math.random() * left.length)]);
   };
   $("doubtful").onclick = () => {
-    const left = pending().filter((p) => p.reason !== "sûr");
+    const left = pending().filter((p) => p.reason !== "sûr" && p.reason !== "échauffement");
     left.sort((a, b) => a.confidence - b.confidence);
     show(left[0] || pending()[0]);
   };
+  $("context").onclick = () => playContext(state.fix?.pair || state.current);
+  $("clip").onclick = closeContext;
+  // Appui long sur l'image ou les boîtes : pas de menu du navigateur (copier, télécharger…).
+  for (const id of ["frame", "list"]) $(id).addEventListener("contextmenu", (e) => e.preventDefault());
   $("repo").onchange = () => { saveSettings(); refreshQueues(); };
   $("token").onchange = () => { saveSettings(); refreshQueues(); };
   $("load").onclick = async () => {

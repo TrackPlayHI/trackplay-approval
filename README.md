@@ -23,7 +23,8 @@ Les mêmes dans les deux modes :
 | ← gauche | faux |
 | → droite | je ne sais pas |
 
-- **Écran partagé** (par défaut). En haut, l'image, avec deux boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, la boîte de chaque caractère sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
+- **Écran partagé** (par défaut). En haut, l'image, avec son origine (salle, champ, moment dans la vidéo : « BCNA Geispolsheim · Temps de jeu · 20:55 ») et des boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre, **▶ Contexte** pour voir la vidéo autour de l'image (±3 s du tableau entier, le champ encadré en jaune puis en rouge au moment de la paire ; joué en boucle à la place de l'image, un appui le referme, aussi pendant une correction). Un appui long sur l'image n'ouvre pas le menu du navigateur.
+- **Échauffement** : les 10 premières paires d'une file sont des paires très sûres (modèle et étiquette d'accord), pour prendre le geste en main ; elles comptent comme les autres. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, la boîte de chaque caractère sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
 - **Liste** (bouton ≡ / ▣). Les paires défilent vers le haut : une paire qui sort par le haut sans geste est **juste**. On pousse une ligne à gauche (fausse) ou à droite (je ne sais pas).
 - **Faux → correction.** Une paire jugée fausse (glissée à gauche, en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
   - sur l'image, **une boîte par caractère** (rectangle qui l'englobe, coins haut-gauche et bas-droite), proposée par le modèle, avec le caractère au-dessus ; on ne corrige que les fausses :
@@ -55,7 +56,9 @@ Les mêmes dans les deux modes :
       "text": "413",
       "boxes": [[12.0, 3.5, 24.0, 28.5], [27.5, 9.0, 31.0, 23.0], [34.0, 3.5, 46.5, 28.5]],
       "confidence": 0.85,
-      "reason": "désaccord"
+      "reason": "désaccord",
+      "clip": "score-text-v2/010.mp4",
+      "where": { "hall": "BCNA Geispolsheim", "field": "game_clock", "time_s": 1255.2 }
     }
   ]
 }
@@ -63,7 +66,10 @@ Les mêmes dans les deux modes :
 
 `boxes` : boîte de chaque caractère, `[x0, y0, x1, y1]` en pixels de l'image (coins haut-gauche et bas-droite). Les anciennes files donnent à la place `positions` (abscisse de chaque caractère) ; l'app en fait des boîtes étroites sur toute la hauteur.
 
+`clip` : clip de contexte (MP4, H.264) dans `queues/` du dépôt des modèles, lu par l'API GitHub avec le jeton ; `where` : salle, champ et moment (secondes) dans la vidéo.
+
 Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
+0. échauffement : 10 paires très sûres ;
 1. désaccord entre le modèle et l'étiquette ;
 2. lecture incertaine ;
 3. échantillon sans étiquette ;
