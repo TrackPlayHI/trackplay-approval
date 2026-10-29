@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#000000">
+  <title>Approval</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="bar">
+    <button id="menu" aria-label="Réglages">☰</button>
+    <span id="title">Approval</span>
+    <span id="progress"></span>
+    <button id="undo" aria-label="Annuler le dernier jugement">↶</button>
+    <button id="mode" aria-label="Changer de mode">≡</button>
+  </header>
+
+  <!-- Écran partagé : l'image en haut, le panneau noir en bas. -->
+  <main id="split">
+    <section id="top">
+      <div id="frame">
+        <img id="image" alt="Image à valider" draggable="false">
+        <div id="overlay"></div>
+      </div>
+      <div id="reason"></div>
+      <div id="picks">
+        <button id="random">Au hasard</button>
+        <button id="doubtful">Douteux</button>
+      </div>
+    </section>
+    <section id="panel">
+      <div id="hint">Pose le doigt pour voir le résultat</div>
+      <div id="answer"></div>
+      <div id="arrows">
+        <span class="up">↑ juste</span><span class="left">← faux</span><span class="right">je ne sais pas →</span>
+      </div>
+    </section>
+  </main>
+
+  <!-- Liste : une paire qui sort par le haut est juste ; poussée à gauche, fausse ; à droite, je ne sais pas. -->
+  <main id="list" hidden></main>
+
+  <div id="done" hidden>
+    <p id="doneText"></p>
+    <button id="send">Envoyer les jugements</button>
+  </div>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Réglages</h2>
+      <label>Dépôt des modèles <input id="repo" placeholder="trackplayhi/trackplay-models"></label>
+      <label>Jeton GitHub <input id="token" type="password" placeholder="github_pat_…"></label>
+      <p class="small">Jeton « fine-grained » limité à ce dépôt, droit <b>Contents : read and write</b>. Il reste sur ce téléphone.</p>
+      <label>File <select id="queue"></select></label>
+      <p id="status" class="small"></p>
+      <div class="row">
+        <button id="demo" type="button">Essayer (exemple)</button>
+        <button id="load" type="button">Charger</button>
+        <button value="close">Fermer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
