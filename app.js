@@ -298,12 +298,30 @@ function renderList() {
     const row = document.createElement("div");
     row.className = "row " + (state.judgments[pair.id]?.verdict || "");
     row.pair = pair;
-    row.innerHTML = `<img alt="" draggable="false"><span class="text"></span>`;
-    row.querySelector("img").src = pair.image;
+    row.innerHTML = `<div class="shot"><img alt="" draggable="false"></div><span class="text"></span>`;
+    const img = row.querySelector("img");
+    img.onload = () => rowBoxes(row.querySelector(".shot"), img, pair);
+    img.src = pair.image;
     row.querySelector(".text").textContent = pair.text;
     rowGestures(row);
     list.appendChild(row);
     observer.observe(row);
+  }
+}
+
+// Boîtes des caractères sur l'image d'une ligne (en pourcentage : elles suivent la taille de l'image).
+function rowBoxes(shot, img, pair) {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  if (!w || !h || !pair.boxes) return;
+  for (const [x0, y0, x1, y1] of pair.boxes) {
+    const box = document.createElement("div");
+    box.className = "box";
+    box.style.left = `${(Math.max(0, x0) / w) * 100}%`;
+    box.style.top = `${(Math.max(0, y0) / h) * 100}%`;
+    box.style.width = `${((Math.min(w, x1) - Math.max(0, x0)) / w) * 100}%`;
+    box.style.height = `${((Math.min(h, y1) - Math.max(0, y0)) / h) * 100}%`;
+    shot.appendChild(box);
   }
 }
 
