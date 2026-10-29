@@ -25,7 +25,17 @@ Les mêmes dans les deux modes :
 
 - **Écran partagé** (par défaut). En haut, l'image, avec deux boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, les rectangles sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
 - **Liste** (bouton ≡ / ▣). Les paires défilent vers le haut : une paire qui sort par le haut sans geste est **juste**. On pousse une ligne à gauche (fausse) ou à droite (je ne sais pas).
-- **↶** annule le dernier jugement.
+- **Faux → correction.** Une paire jugée fausse (glissée à gauche, en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
+  - sur l'image, **un point avec un trait vertical par caractère**, placé où le modèle l'a lu, avec le caractère au-dessus :
+    - **glisser** un point le déplace ;
+    - **appuyer dans le vide** ajoute un point ;
+    - **double appui** sur un point l'efface ;
+  - en dessous, **la valeur**, corrigée au pavé : `0`–`9`, `:`, `.`, `-`, `?` (caractère illisible, en orange), ⌫, « vide » (rien à lire) ;
+  - **Valider** n'est possible que si la valeur a **autant de caractères que de points**, et si quelque chose a changé ;
+  - **Sans valeur** : faux, sans correction (illisible pour toi aussi). **↶** revient à la paire sans rien juger.
+
+  L'app déduit ce qui était faux de ce qui a changé : la valeur, les positions, ou les deux.
+- **↶** (en haut) annule le dernier jugement.
 - À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là.
 
 ## Formats
@@ -41,13 +51,15 @@ Les mêmes dans les deux modes :
       "id": "video-demo-1_tableau-complet/game_clock/13600",
       "image": "data:image/png;base64,…",
       "text": "413",
-      "boxes": [[x0, y0, x1, y1], …],
+      "positions": [18.5, 31.0, 40.2, 52.7],
       "confidence": 0.85,
       "reason": "désaccord"
     }
   ]
 }
 ```
+
+`positions` : abscisse de chaque caractère, en pixels de l'image. Les anciennes files donnent à la place `boxes` (rectangles `[x0, y0, x1, y1]`) ; l'app en prend le milieu.
 
 Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 1. désaccord entre le modèle et l'étiquette ;
@@ -58,12 +70,16 @@ Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 **Jugements** : `judgments/<file>/<appareil>-<date>.json`, écrits par l'app :
 
 ```json
-[{ "id": "…", "text": "413", "verdict": "ok", "at": "2026-10-29T08:00:00Z" }]
+[
+  { "id": "…", "text": "4:13", "verdict": "ok", "at": "2026-10-29T08:00:00Z" },
+  { "id": "…", "text": "4:13", "verdict": "wrong", "correct": "1:41",
+    "positions": [6.0, 20.5, 31.0, 44.5], "wrong": ["value"], "at": "…" }
+]
 ```
 
 `verdict` vaut `ok` (juste), `wrong` (faux) ou `unknown` (je ne sais pas).
 - Une paire juste devient une étiquette pour l'entraînement suivant.
-- Une paire fausse retire l'étiquette de cet échantillon.
+- Une paire fausse **corrigée** (`correct`, avec les `positions`) donne l'étiquette juste. Une paire fausse sans valeur (`correct` à `null`) retire l'étiquette de cet échantillon.
 
 ## Développement
 

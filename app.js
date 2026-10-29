@@ -87,8 +87,10 @@ function useQueue(queue, demo) {
 
 function pending() { return state.queue.pairs.filter((p) => !state.judgments[p.id]); }
 
-function judge(pair, verdict) {
-  state.judgments[pair.id] = { id: pair.id, text: pair.text, verdict, at: new Date().toISOString() };
+function judge(pair, verdict, extra = {}) {
+  state.judgments[pair.id] = {
+    id: pair.id, text: pair.text, verdict, ...extra, at: new Date().toISOString(),
+  };
   state.history.push(pair.id);
   store.set(judgmentsKey(), state.judgments);
   updateProgress();
@@ -99,6 +101,7 @@ function undo() {
   if (!id) return;
   delete state.judgments[id];
   store.set(judgmentsKey(), state.judgments);
+  closeFix();
   if (state.mode === "split") show(state.queue.pairs.find((p) => p.id === id));
   else renderList();
   updateProgress();
@@ -143,16 +146,34 @@ function reveal() {
   const scale = image.clientWidth / image.naturalWidth;
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
-  overlay.innerHTML = '<div class="middle"></div>';
-  for (const [x0, y0, x1, y1] of pair.boxes || []) {
-    const box = document.createElement("div");
-    box.className = "box";
-    Object.assign(box.style, {
-      left: `${x0 * scale}px`, top: `${y0 * scale}px`,
-      width: `${(x1 - x0) * scale}px`, height: `${(y1 - y0) * scale}px`,
-    });
-    overlay.appendChild(box);
-  }
+  drawPoints(positionsOf(pair), pair.text, false);
+}
+
+// Position (pixels de l'image) de chaque caractère : celles du modèle, ou le milieu des rectangles
+// des anciennes files.
+function positionsOf(pair) {
+  const width = $("image").naturalWidth || Infinity;
+  const points = pair.positions || (pair.boxes || []).map(([x0, , x1]) => (x0 + x1) / 2);
+  return points.map((x) => Math.min(width, Math.max(0, x)));
+}
+
+function drawPoints(points, text, editable) {
+  const image = $("image");
+  const overlay = $("overlay");
+  const scale = image.clientWidth / image.naturalWidth;
+  overlay.style.width = `${image.clientWidth}px`;
+  overlay.style.height = `${image.clientHeight}px`;
+  overlay.classList.toggle("editable", editable);
+  overlay.innerHTML = editable ? "" : '<div class="middle"></div>';
+  points.forEach((x, i) => {
+    const point = document.createElement("div");
+    point.className = "pt";
+    point.style.left = `${x * scale}px`;
+    const c = text[i] ?? "";
+    point.innerHTML = `<span class="${c === "?" ? "unknown" : ""}"></span>`;
+    point.firstChild.textContent = c;
+    overlay.appendChild(point);
+  });
 }
 
 function direction(dx, dy) {
@@ -181,7 +202,9 @@ function panelGestures() {
     if (!start) return;
     const verdict = e.type === "pointerup" ? direction(e.clientX - start.x, e.clientY - start.y) : null;
     start = null;
-    if (verdict) {
+    if (verdict === "wrong") {
+      openFix(state.current);
+    } else if (verdict) {
       judge(state.current, verdict);
       next();
     } else {
@@ -239,13 +262,182 @@ function rowGestures(row) {
     start = null;
     row.style.transform = "";
     const verdict = e.type === "pointerup" ? direction(dx, dy) : null;
-    if (verdict === "wrong" || verdict === "unknown") {
+    if (verdict === "unknown") {
       judge(row.pair, verdict);
       row.className = `row ${verdict}`;
+    } else if (verdict === "wrong") {
+      state.listScroll = $("list").scrollTop;
+      $("list").hidden = true;
+      $("split").hidden = false;
+      show(row.pair);
+      openFix(row.pair);
     }
   };
   row.addEventListener("pointerup", release);
   row.addEventListener("pointercancel", release);
+}
+
+// ---- Correction (après « faux ») ----
+// Un point avec un trait vertical par caractère : glisser le déplace, un appui dans le vide en
+// ajoute un, un double appui sur un point l'efface. La valeur se tape au pavé ; elle n'est
+// acceptée que si elle a autant de caractères qu'il y a de points.
+
+const GRAB = 20; // px d'écran autour d'un point pour le saisir
+const DOUBLE_TAP = 350; // ms
+
+function openFix(pair) {
+  state.fix = { pair, value: pair.text, points: positionsOf(pair), lastTap: null };
+  $("panel").hidden = true;
+  $("fix").hidden = false;
+  renderFix();
+}
+
+function closeFix() {
+  if (!state.fix) return;
+  state.fix = null;
+  $("fix").hidden = true;
+  $("panel").hidden = false;
+  $("overlay").classList.remove("editable");
+}
+
+function finishFix() {
+  const pair = state.fix.pair;
+  closeFix();
+  if (state.listScroll !== undefined && state.mode === "list") {
+    $("split").hidden = true;
+    $("list").hidden = false;
+    renderList();
+    $("list").scrollTop = state.listScroll;
+    state.listScroll = undefined;
+  } else {
+    next();
+  }
+  return pair;
+}
+
+function fixChanges() {
+  const { pair, value, points } = state.fix;
+  const before = positionsOf(pair);
+  const wrong = [];
+  if (value !== pair.text) wrong.push("value");
+  if (points.length !== before.length || points.some((x, i) => Math.abs(x - before[i]) > 0.5)) {
+    wrong.push("positions");
+  }
+  return wrong;
+}
+
+function renderFix() {
+  const { value, points } = state.fix;
+  drawPoints(points, value, true);
+  const field = $("value");
+  field.innerHTML = "";
+  for (const c of value) {
+    const span = document.createElement("span");
+    span.textContent = c;
+    if (c === "?") span.className = "unknown";
+    field.appendChild(span);
+  }
+  if (!value) field.innerHTML = '<span class="empty">vide</span>';
+  const wrong = fixChanges();
+  const counts = value.length === points.length;
+  $("fixOk").disabled = !counts || wrong.length === 0;
+  $("fixHint").textContent = !counts
+    ? `${value.length} caractère(s) pour ${points.length} point(s)`
+    : wrong.length === 0
+      ? "Corrige la valeur ou les points, ou choisis « Sans valeur »"
+      : `Corrigé : ${wrong.map((w) => (w === "value" ? "valeur" : "positions")).join(" et ")}`;
+}
+
+function key(k) {
+  const fix = state.fix;
+  if (k === "⌫") fix.value = fix.value.slice(0, -1);
+  else if (k === "vide") fix.value = "";
+  else if (fix.value.length < 8) fix.value += k;
+  renderFix();
+}
+
+function overlayGestures() {
+  const overlay = $("overlay");
+  let drag = null;
+  const imageX = (e) => {
+    const image = $("image");
+    const rect = image.getBoundingClientRect();
+    const scale = image.clientWidth / image.naturalWidth;
+    return { x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / scale)), scale };
+  };
+  overlay.addEventListener("pointerdown", (e) => {
+    if (!state.fix) return;
+    const { x, scale } = imageX(e);
+    const points = state.fix.points;
+    let nearest = -1;
+    points.forEach((p, i) => {
+      if (Math.abs(p - x) * scale <= GRAB && (nearest < 0 || Math.abs(p - x) < Math.abs(points[nearest] - x))) nearest = i;
+    });
+    const now = Date.now();
+    const last = state.fix.lastTap;
+    if (nearest >= 0 && last && last.index === nearest && now - last.at < DOUBLE_TAP) {
+      points.splice(nearest, 1); // double appui : effacé
+      state.fix.lastTap = null;
+      renderFix();
+      return;
+    }
+    if (nearest < 0) {
+      points.push(x); // appui dans le vide : ajouté
+      points.sort((a, b) => a - b);
+      nearest = points.indexOf(x);
+    }
+    state.fix.lastTap = { index: nearest, at: now };
+    drag = { index: nearest };
+    overlay.setPointerCapture(e.pointerId);
+    renderFix();
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    if (!drag || !state.fix) return;
+    const points = state.fix.points;
+    points[drag.index] = imageX(e).x;
+    const moved = points[drag.index];
+    points.sort((a, b) => a - b);
+    drag.index = points.indexOf(moved);
+    state.fix.lastTap = null; // un glissé n'est pas un appui
+    renderFix();
+  });
+  const release = () => { drag = null; };
+  overlay.addEventListener("pointerup", release);
+  overlay.addEventListener("pointercancel", release);
+}
+
+function fixWiring() {
+  overlayGestures();
+  for (const k of ["1", "2", "3", "4", "5", "6", "7", "8", "9", ":", "0", ".", "-", "?", "⌫", "vide"]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = k;
+    if (k === "?") b.className = "unknown";
+    b.onclick = () => key(k);
+    $("keypad").appendChild(b);
+  }
+  $("fixOk").onclick = () => {
+    const { pair, value, points } = state.fix;
+    const wrong = fixChanges();
+    judge(pair, "wrong", {
+      correct: value, positions: points.map((x) => Math.round(x * 10) / 10), wrong,
+    });
+    finishFix();
+  };
+  $("fixNone").onclick = () => {
+    judge(state.fix.pair, "wrong", { correct: null, positions: null, wrong: [] });
+    finishFix();
+  };
+  $("fixCancel").onclick = () => {
+    const pair = state.fix.pair;
+    closeFix();
+    if (state.listScroll !== undefined) {
+      state.listScroll = undefined;
+      render();
+    } else {
+      show(pair);
+    }
+  };
 }
 
 // ---- Ensemble ----
@@ -297,6 +489,7 @@ function saveSettings() {
 
 function wire() {
   panelGestures();
+  fixWiring();
   $("menu").onclick = () => { refreshQueues(); $("settings").showModal(); };
   $("mode").onclick = () => {
     state.mode = state.mode === "split" ? "list" : "split";
