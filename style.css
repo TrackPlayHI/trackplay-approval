@@ -30,21 +30,23 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #image { width: 100%; max-width: 640px; image-rendering: pixelated; border-radius: 4px; }
 #overlay { position: absolute; inset: 0; margin: 0 auto; max-width: 640px; pointer-events: none; }
 #overlay.editable { pointer-events: auto; touch-action: none; }
-#overlay .pt { position: absolute; top: -6px; bottom: -6px; width: 2px; margin-left: -1px;
-  background: var(--accent); }
-#overlay .pt::after { content: ""; position: absolute; left: -6px; bottom: -8px; width: 14px;
-  height: 14px; border-radius: 50%; background: var(--accent); }
-#overlay .pt span { position: absolute; top: -26px; left: -8px; width: 18px; text-align: center;
+/* Boîte de chaque caractère (coins haut-gauche et bas-droite), son caractère au-dessus. */
+#overlay .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px;
+  box-sizing: border-box; }
+#overlay .box span { position: absolute; top: -26px; left: 0; right: 0; text-align: center;
   font-weight: 700; color: #fff; }
-#overlay .pt span.unknown, #value .unknown, #keypad .unknown { color: var(--unknown); }
-#overlay .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px; }
+#overlay .box span.unknown, #value .unknown, #keypad .unknown { color: var(--unknown); }
+#overlay .box .corner { position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); }
+#overlay .box .corner.tl { left: -8px; top: -8px; }
+#overlay .box .corner.br { right: -8px; bottom: -8px; }
 #overlay .middle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #fff8; }
 #trash { position: absolute; right: 0; bottom: -60px; z-index: 2; font-size: 26px; padding: 8px 12px;
   background: #2a2a2a; border: 2px solid transparent; }
 #trash.hot { background: var(--wrong); border-color: #fff; }
-#overlay .pt.selected { background: #fff; width: 3px; }
-#overlay .pt.selected::after { background: #fff; }
-#overlay .pt.current span { text-decoration: underline; }
+#overlay .box.selected { border-color: #fff; border-width: 3px; }
+#overlay .box.selected .corner { background: #fff; }
+#overlay .box.current span { text-decoration: underline; }
 #value .caret { display: inline-block; width: 3px; height: 1em; margin: 0 1px; vertical-align: -0.1em;
   background: var(--accent); animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
