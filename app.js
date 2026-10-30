@@ -1,9 +1,14 @@
 // Approval : valider d'un geste les paires « image + résultat » proposées par un modèle.
-// Gestes, les mêmes dans les deux modes : haut = juste, gauche = faux, droite = je ne sais pas.
+// Boutons de jugement, les mêmes dans les deux modes : ✓ juste, ✗ faux (ouvre la correction),
+// ? je ne sais pas, ↺ remet la paire à « non jugée ».
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const SWIPE = 60; // px avant qu'un glissé compte
+const VERDICTS = [
+  ["ok", "✓", "Juste"], ["wrong", "✗", "Faux"], ["unknown", "?", "Je ne sais pas"],
+  ["reset", "↺", "Non jugée"],
+];
+const ADVANCE = 150; // ms : le bouton reste allumé un instant avant la paire suivante
 const store = {
   get(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -58,13 +63,14 @@ async function send() {
   const list = Object.values(state.judgments);
   if (!list.length) return toast("Aucun jugement à envoyer");
   if (state.demo) return toast(`Exemple : ${list.length} jugements, rien n'est envoyé`);
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const now = new Date();
+  const stamp = now.toISOString().replace(/[:.]/g, "-");
   const path = `judgments/${state.queue.name}/${state.device}-${stamp}.json`;
   try {
     await github(`contents/${path}`, {
       method: "PUT",
       body: JSON.stringify({
-        message: `Jugements de ${state.queue.name} (${list.length} paires)`,
+        message: commitMessage(list, path, now),
         content: base64(JSON.stringify(list, null, 1) + "\n"),
       }),
     });
@@ -72,6 +78,16 @@ async function send() {
   } catch (error) {
     toast(`Envoi impossible : ${error.message}`);
   }
+}
+
+// Message de commit facile à retrouver (préfixe « Approval · ») :
+// « Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 15 ?) ».
+function commitMessage(list, path, now) {
+  const count = (v) => list.filter((j) => j.verdict === v).length;
+  return `Approval · ${state.queue.name} : ${list.length} jugements `
+    + `(${count("ok")} ✓, ${count("wrong")} ✗, ${count("unknown")} ?)\n\n`
+    + `Appareil ${state.device}, ${now.toISOString().slice(0, 16).replace("T", " ")} UTC.\n`
+    + `Fichier : ${path}\n`;
 }
 
 // ---- File et jugements ----
@@ -99,6 +115,30 @@ function judge(pair, verdict, extra = {}) {
   updateProgress();
 }
 
+// ↺ : la paire redevient « non jugée ».
+function clearJudgment(id) {
+  delete state.judgments[id];
+  state.history = state.history.filter((h) => h !== id);
+  store.set(judgmentsKey(), state.judgments);
+  updateProgress();
+}
+
+// Réglages : effacer les jugements « juste » (corrections et « ? » gardées), ou tous.
+function clearJudgments(onlyOk) {
+  if (!state.queue) return toast("Aucune file chargée");
+  const ids = Object.values(state.judgments).filter((j) => !onlyOk || j.verdict === "ok").map((j) => j.id);
+  const question = onlyOk
+    ? `Effacer les ${ids.length} « justes » de ${state.queue.name} ? Tes corrections et tes « ? » restent.`
+    : `Effacer les ${ids.length} jugements de ${state.queue.name} ?`;
+  if (!ids.length) return toast("Rien à effacer");
+  if (!confirm(question)) return;
+  for (const id of ids) clearJudgment(id);
+  state.doneClosed = false;
+  $("settings").close();
+  render();
+  toast(`${ids.length} jugements effacés`);
+}
+
 function undo() {
   const id = state.history.pop();
   if (!id) return;
@@ -119,7 +159,7 @@ function updateProgress() {
   for (const j of Object.values(state.judgments)) counts[j.verdict]++;
   $("doneText").textContent =
     `${state.queue.name} terminée : ${counts.ok} justes, ${counts.wrong} fausses, ${counts.unknown} sans avis.`;
-  $("done").hidden = done < total;
+  $("done").hidden = done < total || state.doneClosed;
 }
 
 // ---- Écran partagé ----
@@ -171,15 +211,20 @@ function closeContext() {
 function show(pair) {
   closeContext();
   state.current = pair || null;
-  $("panel").className = "";
   $("answer").textContent = "";
   $("overlay").innerHTML = "";
+  lightVerdicts($("verdicts"), pair);
+  $("verdicts").hidden = !pair;
   if (!pair) {
     $("image").removeAttribute("src");
     $("reason").textContent = "Plus rien à valider";
     return;
   }
-  $("image").src = pair.image;
+  // Résultat affiché tout de suite, une fois l'image chargée (les boîtes suivent sa taille).
+  const image = $("image");
+  image.onload = () => { if (state.current === pair && !state.fix) reveal(); };
+  image.src = pair.image;
+  if (image.complete && image.naturalWidth) reveal();
   $("reason").textContent = [pair.reason, `confiance ${Math.round(pair.confidence * 100)} %`, whereText(pair)]
     .filter(Boolean).join(" · ");
   $("context").hidden = !pair.clip;
@@ -239,43 +284,39 @@ function drawBoxes(boxes, text, editable, marks = {}) {
   });
 }
 
-function direction(dx, dy) {
-  if (-dy > SWIPE && -dy > Math.abs(dx)) return "ok";
-  if (dx < -SWIPE && -dx > Math.abs(dy)) return "wrong";
-  if (dx > SWIPE && dx > Math.abs(dy)) return "unknown";
-  return null;
+// Colonne de boutons de jugement ; `onPick(verdict)` reçoit ok, wrong, unknown ou reset.
+function fillVerdicts(column, onPick) {
+  column.innerHTML = "";
+  for (const [verdict, symbol, label] of VERDICTS) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `verdict ${verdict}`;
+    b.dataset.verdict = verdict;
+    b.textContent = symbol;
+    b.setAttribute("aria-label", label);
+    b.onclick = (e) => { e.stopPropagation(); onPick(verdict); };
+    column.appendChild(b);
+  }
 }
 
-function panelGestures() {
-  const panel = $("panel");
-  let start = null;
-  panel.addEventListener("pointerdown", (e) => {
-    if (!state.current) return;
-    start = { x: e.clientX, y: e.clientY };
-    panel.setPointerCapture(e.pointerId);
-    panel.classList.add("pressed");
-    reveal();
-  });
-  panel.addEventListener("pointermove", (e) => {
-    if (!start) return;
-    const verdict = direction(e.clientX - start.x, e.clientY - start.y);
-    panel.className = "pressed" + (verdict ? ` ${verdict}` : "");
-  });
-  const release = (e) => {
-    if (!start) return;
-    const verdict = e.type === "pointerup" ? direction(e.clientX - start.x, e.clientY - start.y) : null;
-    start = null;
-    if (verdict === "wrong") {
-      openFix(state.current);
-    } else if (verdict) {
-      judge(state.current, verdict);
-      next();
-    } else {
-      show(state.current); // relâché sans geste : on recache le résultat
-    }
-  };
-  panel.addEventListener("pointerup", release);
-  panel.addEventListener("pointercancel", release);
+// Un seul bouton allumé : celui du jugement actuel de la paire.
+function lightVerdicts(column, pair) {
+  const verdict = pair && state.judgments[pair.id]?.verdict;
+  for (const b of column.children) b.classList.toggle("on", b.dataset.verdict === verdict);
+}
+
+// Écran partagé : ✓ et ? jugent et passent à la paire suivante ; ✗ ouvre la correction ; ↺ efface.
+function pickSplit(verdict) {
+  const pair = state.current;
+  if (!pair || state.fix) return;
+  if (verdict === "wrong") return openFix(pair);
+  if (verdict === "reset") {
+    clearJudgment(pair.id);
+    return lightVerdicts($("verdicts"), pair);
+  }
+  judge(pair, verdict);
+  lightVerdicts($("verdicts"), pair);
+  setTimeout(() => { if (state.current === pair && !state.fix) next(); }, ADVANCE);
 }
 
 // ---- Liste ----
@@ -283,57 +324,39 @@ function panelGestures() {
 function renderList() {
   const list = $("list");
   list.innerHTML = "";
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      // Sortie par le haut sans geste : juste.
-      const pair = entry.target.pair;
-      const above = entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? 0);
-      if (!entry.isIntersecting && above && !state.judgments[pair.id]) {
-        judge(pair, "ok");
-        fillRow(entry.target);
-      }
-    }
-  }, { root: list });
   for (const pair of state.queue.pairs) {
     const row = document.createElement("div");
     row.pair = pair;
-    row.innerHTML = `<div class="shot"><img alt="" draggable="false"></div><span class="text"></span>`
-      + '<span class="mark"></span>';
+    row.innerHTML = '<div class="shot"><img alt="" draggable="false"></div>'
+      + '<div class="text"><span class="value"></span><span class="note"></span></div>'
+      + '<div class="verdicts"></div>';
+    fillVerdicts(row.querySelector(".verdicts"), (verdict) => pickRow(row, verdict));
     const img = row.querySelector("img");
     img.onload = () => fillRow(row);
     img.src = pair.image;
     fillRow(row);
-    rowGestures(row);
     list.appendChild(row);
-    observer.observe(row);
   }
 }
 
 // Ce que montre une ligne : avant jugement, la lecture du modèle ; jugée, ce qui a été validé
-// (juste : la lecture ; corrigée : la correction ; sans valeur : rien) et une marque en bas à droite :
-// ✓ vert (juste, ou « corrigé »), ✗ rouge (sans valeur), ? gris (je ne sais pas).
+// (juste : la lecture ; corrigée : la correction, « corrigé » ; sans valeur : rien), et le bouton
+// du jugement allumé.
 function fillRow(row) {
   const pair = row.pair;
   const j = state.judgments[pair.id];
   let text = pair.text;
   let boxes = pair.boxes;
-  let mark = "";
   let note = "";
-  if (j?.verdict === "ok") {
-    mark = "✓";
-  } else if (j?.verdict === "wrong" && j.correct != null) {
-    [text, boxes, mark, note] = [j.correct, j.boxes, "✓", "corrigé"];
+  if (j?.verdict === "wrong" && j.correct != null) {
+    [text, boxes, note] = [j.correct, j.boxes, "corrigé"];
   } else if (j?.verdict === "wrong") {
-    [text, boxes, mark, note] = ["—", [], "✗", "sans valeur"];
-  } else if (j?.verdict === "unknown") {
-    mark = "?";
+    [text, boxes, note] = ["—", [], "sans valeur"];
   }
   row.className = `row ${j?.verdict || ""}`;
-  row.querySelector(".text").textContent = text;
-  const markEl = row.querySelector(".mark");
-  markEl.textContent = mark;
-  markEl.dataset.note = note;
-  markEl.className = `mark ${j?.verdict || ""}`;
+  row.querySelector(".value").textContent = text;
+  row.querySelector(".note").textContent = note;
+  lightVerdicts(row.querySelector(".verdicts"), pair);
   const shot = row.querySelector(".shot");
   shot.querySelectorAll(".box").forEach((b) => b.remove());
   rowBoxes(shot, row.querySelector("img"), boxes);
@@ -355,38 +378,20 @@ function rowBoxes(shot, img, boxes) {
   }
 }
 
-function rowGestures(row) {
-  let start = null;
-  row.addEventListener("pointerdown", (e) => {
-    start = { x: e.clientX, y: e.clientY };
-    row.setPointerCapture(e.pointerId);
-  });
-  row.addEventListener("pointermove", (e) => {
-    if (!start) return;
-    const dx = e.clientX - start.x;
-    if (Math.abs(dx) > Math.abs(e.clientY - start.y)) row.style.transform = `translateX(${dx}px)`;
-  });
-  const release = (e) => {
-    if (!start) return;
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    start = null;
-    row.style.transform = "";
-    const verdict = e.type === "pointerup" ? direction(dx, dy) : null;
-    if (verdict === "unknown") {
-      judge(row.pair, verdict);
-      fillRow(row);
-    } else if (verdict === "wrong") {
-      // Faux, même sur une ligne déjà jugée : la correction repart de la lecture d'origine.
-      state.listScroll = $("list").scrollTop;
-      $("list").hidden = true;
-      $("split").hidden = false;
-      show(row.pair);
-      openFix(row.pair);
-    }
-  };
-  row.addEventListener("pointerup", release);
-  row.addEventListener("pointercancel", release);
+// Liste : ✓ et ? jugent la ligne ; ✗ ouvre la correction (même sur une ligne déjà jugée, elle
+// repart de la lecture d'origine) ; ↺ la remet à « non jugée ».
+function pickRow(row, verdict) {
+  if (verdict === "wrong") {
+    state.listScroll = $("list").scrollTop;
+    $("list").hidden = true;
+    $("split").hidden = false;
+    show(row.pair);
+    openFix(row.pair);
+    return;
+  }
+  if (verdict === "reset") clearJudgment(row.pair.id);
+  else judge(row.pair, verdict);
+  fillRow(row);
 }
 
 // ---- Correction (après « faux ») ----
@@ -736,7 +741,7 @@ function saveSettings() {
 }
 
 function wire() {
-  panelGestures();
+  fillVerdicts($("verdicts"), pickSplit);
   fixWiring();
   $("menu").onclick = () => { refreshQueues(); $("settings").showModal(); };
   $("mode").onclick = () => {
@@ -746,6 +751,11 @@ function wire() {
   };
   $("undo").onclick = undo;
   $("send").onclick = send;
+  $("doneClose").onclick = () => { state.doneClosed = true; updateProgress(); };
+  // La progression rouvre le panneau de fin (pour envoyer).
+  $("progress").onclick = () => { state.doneClosed = false; updateProgress(); };
+  $("clearOk").onclick = () => clearJudgments(true);
+  $("clearAll").onclick = () => clearJudgments(false);
   $("random").onclick = () => {
     const left = pending();
     show(left[Math.floor(Math.random() * left.length)]);

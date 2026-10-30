@@ -13,20 +13,23 @@ L'app est générique : elle affiche n'importe quelle file de paires au format c
    - **File** : choisir une file, puis **Charger**.
 3. **Essayer (exemple)** charge une file d'exemple incluse dans l'app, sans compte. Rien n'est envoyé.
 
-## Gestes
+## Juger
 
-Les mêmes dans les deux modes :
+Les mêmes boutons dans les deux modes, en colonne à droite ; un seul est allumé, celui du jugement actuel de la paire :
 
-| Geste | Sens |
+| Bouton | Sens |
 |---|---|
-| ↑ haut | juste |
-| ← gauche | faux |
-| → droite | je ne sais pas |
+| ✓ (vert) | juste |
+| ✗ (rouge) | faux : ouvre la correction |
+| ? (orange) | je ne sais pas |
+| ↺ | remet la paire à « non jugée » |
 
-- **Écran partagé** (par défaut). En haut, l'image, avec son origine (salle, champ, moment dans la vidéo : « BCNA Geispolsheim · Temps de jeu · 20:55 ») et des boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre, **▶ Contexte** pour voir la vidéo autour de l'image (±3 s du tableau entier, le champ encadré en jaune puis en rouge au moment de la paire ; joué en boucle à la place de l'image, un appui le referme, aussi pendant une correction). Un appui long sur l'image n'ouvre pas le menu du navigateur.
-- **Échauffement** : les 10 premières paires d'une file sont des paires très sûres (modèle et étiquette d'accord), pour prendre le geste en main ; elles comptent comme les autres. En bas, le panneau noir. Doigt posé : le résultat apparaît (la valeur, la boîte de chaque caractère sur l'image et un trait vertical au milieu). On glisse sans lever le doigt, et le panneau prend la couleur du jugement. Relâché sans geste : rien n'est jugé.
-- **Liste** (bouton ≡ / ▣). Chaque ligne montre l'image avec la boîte de chaque caractère et la valeur lue ; une fois jugée, ce qui a été validé (la lecture, ou ta correction) et une marque en bas à droite : ✓ vert (juste, ou « corrigé »), ✗ rouge (sans valeur), ? gris (je ne sais pas). Glisser à gauche une ligne déjà jugée rouvre la correction depuis la lecture d'origine. Les paires défilent vers le haut : une paire qui sort par le haut sans geste est **juste**. On pousse une ligne à gauche (fausse) ou à droite (je ne sais pas).
-- **Faux → correction.** Une paire jugée fausse (glissée à gauche, en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
+Rien n'est jugé sans bouton : ni en faisant défiler la liste, ni en changeant de mode.
+
+- **Écran partagé** (par défaut). En haut, l'image, avec son origine (salle, champ, moment dans la vidéo : « BCNA Geispolsheim · Temps de jeu · 20:55 ») et des boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre, **▶ Contexte** pour voir la vidéo autour de l'image (±3 s du tableau entier, le champ encadré en jaune puis en rouge au moment de la paire ; joué en boucle à la place de l'image, un appui le referme, aussi pendant une correction). Un appui long sur l'image n'ouvre pas le menu du navigateur. En bas, le résultat est affiché tout de suite : la valeur, et sur l'image la boîte de chaque caractère et un trait vertical au milieu. Après ✓ ou ?, l'app passe à la paire suivante ; **↶** en haut revient en arrière.
+- **Échauffement** : les 10 premières paires d'une file sont des paires très sûres (modèle et étiquette d'accord), pour prendre la main ; elles comptent comme les autres.
+- **Liste** (bouton ≡ / ▣). Chaque ligne montre l'image avec la boîte de chaque caractère, la valeur et ses boutons. Une fois jugée, elle montre ce qui a été validé : la lecture, ou ta correction (« corrigé »), ou rien (« sans valeur »). ✗ sur une ligne déjà jugée rouvre la correction depuis la lecture d'origine.
+- **Faux → correction.** ✗ (en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
   - sur l'image, **une boîte par caractère** (rectangle qui l'englobe, coins haut-gauche et bas-droite), proposée par le modèle, avec le caractère au-dessus ; on ne corrige que les fausses :
     - **glisser un coin** (rond bleu) redimensionne la boîte ;
     - **glisser l'intérieur** déplace la boîte ;
@@ -39,7 +42,9 @@ Les mêmes dans les deux modes :
 
   L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
 - **↶** (en haut) annule le dernier jugement.
-- À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là.
+- À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là. Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
+- Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 15 ?)`, avec l'appareil, la date et le fichier dans le corps du message.
+- ☰ Réglages, pour la file chargée (avec confirmation ; ce qui est déjà envoyé reste dans le dépôt) : **Effacer les justes** (garde les corrections et les « ? ») ou **Tout effacer**.
 
 ## Formats
 
