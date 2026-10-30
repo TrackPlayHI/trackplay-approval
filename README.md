@@ -58,7 +58,7 @@ Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire d�
     - **appuyer dans le vide** ajoute une boîte, de la taille des autres, à ajuster ;
     - **toucher** une boîte la sélectionne (en blanc) et fait apparaître la **poubelle** 🗑 sous l'image : glisser la boîte dessus l'efface, la toucher efface la boîte sélectionnée ;
     - **double appui** sur une boîte l'efface aussi ;
-  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. La boîte du caractère juste avant le curseur a son caractère souligné. Pavé de téléphone, séparateurs à droite (`1 2 3 -` / `4 5 6 :` / `7 8 9 .` / `? 0 ⌫ vide`) : `?` caractère illisible (en orange), ⌫ efface, « vide » vide la valeur ;
+  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. La boîte du caractère juste avant le curseur a son caractère souligné. Pavé de calculatrice, séparateurs à droite (`7 8 9 -` / `4 5 6 :` / `1 2 3 .` / `? 0 ⌫ vide`) : `?` caractère illisible (en orange), ⌫ efface, « vide » vide la valeur ;
   - **rien à lire** (afficheur éteint) : « vide » et toutes les boîtes effacées ; c'est une vraie étiquette, le modèle apprend à ne rien trouver ;
   - **Valider** n'est possible que si la valeur a **autant de caractères que de boîtes** (zéro compris), et si le résultat diffère de la lecture du modèle (sinon, c'est ✓) ; on revient aux boutons, ✗ allumé, la correction affichée ;
   - **Retour** revient aux boutons sans rien changer.
