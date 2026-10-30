@@ -14,7 +14,6 @@
     <button id="menu" aria-label="Réglages">☰</button>
     <span id="title">Approval</span>
     <span id="progress"></span>
-    <button id="undo" aria-label="Annuler le dernier jugement">↶</button>
     <button id="mode" aria-label="Changer de mode">≡</button>
   </header>
 
@@ -29,13 +28,11 @@
       </div>
       <div id="reason"></div>
       <div id="picks">
-        <button id="random">Au hasard</button>
-        <button id="doubtful">Douteux</button>
         <button id="context" hidden>▶ Contexte</button>
       </div>
     </section>
     <section id="panel">
-      <div id="answer"></div>
+      <div id="result"><div id="answer"></div><div id="answerNote" class="small"></div></div>
       <div id="verdicts" class="verdicts"></div>
     </section>
     <section id="fix" hidden>
@@ -43,14 +40,13 @@
       <div id="fixHint" class="small"></div>
       <div id="keypad"></div>
       <div id="fixButtons">
-        <button id="fixCancel" type="button" aria-label="Annuler">↶</button>
-        <button id="fixNone" type="button">Sans valeur</button>
+        <button id="fixCancel" type="button">Retour</button>
         <button id="fixOk" type="button">Valider</button>
       </div>
     </section>
   </main>
 
-  <!-- Liste : chaque ligne a ses boutons de jugement (✓ juste, ✗ faux, ? je ne sais pas, ↺ non jugée). -->
+  <!-- Liste : chaque carte a ses boutons de jugement ; glissée à droite, elle s'ouvre dans l'écran partagé. -->
   <main id="list" hidden></main>
 
   <div id="done" hidden>

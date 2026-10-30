@@ -1,14 +1,16 @@
 // Approval : valider d'un geste les paires « image + résultat » proposées par un modèle.
-// Boutons de jugement, les mêmes dans les deux modes : ✓ juste, ✗ faux (ouvre la correction),
-// ? je ne sais pas, ↺ remet la paire à « non jugée ».
+// Boutons de jugement, les mêmes dans les deux modes : ✓ juste, ✗ faux (ouvre l'édition),
+// ? je ne sais pas, ⊘ écarter (image à ne pas apprendre), ↺ remet la paire à « non jugée ».
+// Glissés (écran partagé, hors édition) : bas = suivante, haut = précédente, gauche = liste ;
+// en liste, une carte glissée à droite s'ouvre dans l'écran partagé.
 "use strict";
 
 const $ = (id) => document.getElementById(id);
 const VERDICTS = [
   ["ok", "✓", "Juste"], ["wrong", "✗", "Faux"], ["unknown", "?", "Je ne sais pas"],
-  ["reset", "↺", "Non jugée"],
+  ["discard", "⊘", "Écarter"], ["reset", "↺", "Non jugée"],
 ];
-const ADVANCE = 150; // ms : le bouton reste allumé un instant avant la paire suivante
+const SWIPE = 60; // px avant qu'un glissé compte
 const store = {
   get(key, fallback) {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
@@ -24,7 +26,7 @@ const state = {
   queue: null, // { name, pairs: [{ id, image, text, boxes, confidence, reason }] }
   demo: false,
   judgments: {}, // id -> { id, text, verdict, at }
-  history: [], // ids, pour annuler
+  index: 0, // paire de l'écran partagé, dans l'ordre de la file
   current: null,
   mode: store.get("approval:mode", "split"),
 };
@@ -85,7 +87,7 @@ async function send() {
 function commitMessage(list, path, now) {
   const count = (v) => list.filter((j) => j.verdict === v).length;
   return `Approval · ${state.queue.name} : ${list.length} jugements `
-    + `(${count("ok")} ✓, ${count("wrong")} ✗, ${count("unknown")} ?)\n\n`
+    + `(${count("ok")} ✓, ${count("wrong")} ✗, ${count("unknown")} ?, ${count("discard")} ⊘)\n\n`
     + `Appareil ${state.device}, ${now.toISOString().slice(0, 16).replace("T", " ")} UTC.\n`
     + `Fichier : ${path}\n`;
 }
@@ -98,7 +100,9 @@ function useQueue(queue, demo) {
   state.queue = queue;
   state.demo = demo;
   state.judgments = store.get(judgmentsKey(), {});
-  state.history = [];
+  // On ouvre sur la première paire non jugée.
+  const first = queue.pairs.findIndex((p) => !state.judgments[p.id]);
+  state.index = Math.max(0, first);
   render();
 }
 
@@ -112,6 +116,22 @@ function boxesLabel(boxes) {
   return n === 0 ? `aucun ${object}` : `${n} ${object}${n > 1 ? "s" : ""}`;
 }
 
+// Ce qui est validé pour une paire, montré partout (écran partagé, liste, point de départ de
+// l'édition) : juste ou non jugée : la lecture du modèle ; corrigée : la correction ; écartée
+// (ou ancien « faux sans valeur ») : rien.
+function validated(pair) {
+  const j = state.judgments[pair.id];
+  const corrected = j?.verdict === "wrong" && (boxesMode() ? j.boxes != null : j.correct != null);
+  const discarded = j?.verdict === "discard" || (j?.verdict === "wrong" && !corrected);
+  if (discarded) return { text: "—", boxes: [], note: "écartée", discarded: true };
+  const text = corrected && !boxesMode() ? j.correct : pair.text;
+  const boxes = corrected ? j.boxes : pair.boxes;
+  return { text: boxesMode() ? boxesLabel(boxes) : text, value: text, boxes, note: corrected ? "corrigé" : "" };
+}
+
+// Valeur affichée : « vide » quand il n'y a rien à lire.
+function shownText(v) { return v.text === "" ? "vide" : v.text; }
+
 function pending() { return state.queue.pairs.filter((p) => !state.judgments[p.id]); }
 
 function judge(pair, verdict, extra = {}) {
@@ -120,7 +140,6 @@ function judge(pair, verdict, extra = {}) {
   state.judgments[pair.id] = {
     id: pair.id, text: pair.text, verdict, ...boxes, ...extra, at: new Date().toISOString(),
   };
-  state.history.push(pair.id);
   store.set(judgmentsKey(), state.judgments);
   updateProgress();
 }
@@ -128,7 +147,6 @@ function judge(pair, verdict, extra = {}) {
 // ↺ : la paire redevient « non jugée ».
 function clearJudgment(id) {
   delete state.judgments[id];
-  state.history = state.history.filter((h) => h !== id);
   store.set(judgmentsKey(), state.judgments);
   updateProgress();
 }
@@ -149,26 +167,15 @@ function clearJudgments(onlyOk) {
   toast(`${ids.length} jugements effacés`);
 }
 
-function undo() {
-  const id = state.history.pop();
-  if (!id) return;
-  delete state.judgments[id];
-  store.set(judgmentsKey(), state.judgments);
-  closeFix();
-  if (state.mode === "split") show(state.queue.pairs.find((p) => p.id === id));
-  else renderList();
-  updateProgress();
-}
-
 function updateProgress() {
   if (!state.queue) return;
   const total = state.queue.pairs.length;
   const done = total - pending().length;
   $("progress").textContent = `${done} / ${total}${state.demo ? " (exemple)" : ""}`;
-  const counts = { ok: 0, wrong: 0, unknown: 0 }; // jugements de cette file
+  const counts = { ok: 0, wrong: 0, unknown: 0, discard: 0 }; // jugements de cette file
   for (const j of Object.values(state.judgments)) counts[j.verdict]++;
-  $("doneText").textContent =
-    `${state.queue.name} terminée : ${counts.ok} justes, ${counts.wrong} fausses, ${counts.unknown} sans avis.`;
+  $("doneText").textContent = `${state.queue.name} terminée : ${counts.ok} justes, `
+    + `${counts.wrong} fausses, ${counts.unknown} sans avis, ${counts.discard} écartées.`;
   $("done").hidden = done < total || state.doneClosed;
 }
 
@@ -227,7 +234,7 @@ function show(pair) {
   $("verdicts").hidden = !pair;
   if (!pair) {
     $("image").removeAttribute("src");
-    $("reason").textContent = "Plus rien à valider";
+    $("reason").textContent = "File vide";
     return;
   }
   // Résultat affiché tout de suite, une fois l'image chargée (les boîtes suivent sa taille).
@@ -246,15 +253,22 @@ function show(pair) {
   $("context").hidden = !pair.clip;
 }
 
-function next() { show(pending()[0]); }
+// Paire `index` de la file dans l'écran partagé.
+function showIndex(index) {
+  state.index = Math.min(Math.max(0, index), state.queue.pairs.length - 1);
+  show(state.queue.pairs[state.index]);
+}
 
+// Résultat de la paire : la version validée (corrigée en priorité), avec « corrigé » ou « écartée ».
 function reveal() {
   const pair = state.current;
   if (!pair) return;
-  $("answer").textContent = boxesMode() ? boxesLabel(pair.boxes) : pair.text;
-  $("answer").classList.toggle("label", boxesMode());
+  const v = validated(pair);
+  $("answer").textContent = shownText(v);
+  $("answer").classList.toggle("label", boxesMode() || v.text === "");
+  $("answerNote").textContent = v.note;
   fitImage();
-  drawBoxes(boxesOf(pair), boxesMode() ? "" : pair.text, false);
+  drawBoxes(boxesOf({ boxes: v.boxes }), boxesMode() ? "" : v.text, false);
 }
 
 // Image de l'écran partagé : la plus grande possible dans la place du haut, sans jamais la
@@ -338,18 +352,40 @@ function lightVerdicts(column, pair) {
   for (const b of column.children) b.classList.toggle("on", b.dataset.verdict === verdict);
 }
 
-// Écran partagé : ✓ et ? jugent et passent à la paire suivante ; ✗ ouvre la correction ; ↺ efface.
+// Écran partagé : ✓, ?, ⊘ jugent la paire et ↺ l'efface, sans changer de paire ; ✗ ouvre l'édition.
 function pickSplit(verdict) {
   const pair = state.current;
   if (!pair || state.fix) return;
   if (verdict === "wrong") return openFix(pair);
-  if (verdict === "reset") {
-    clearJudgment(pair.id);
-    return lightVerdicts($("verdicts"), pair);
-  }
-  judge(pair, verdict);
-  lightVerdicts($("verdicts"), pair);
-  setTimeout(() => { if (state.current === pair && !state.fix) next(); }, ADVANCE);
+  if (verdict === "reset") clearJudgment(pair.id);
+  else judge(pair, verdict);
+  show(pair);
+}
+
+// Glissés de l'écran partagé, hors édition : bas = suivante, haut = précédente, gauche = liste.
+function splitGestures() {
+  const split = $("split");
+  let start = null;
+  split.addEventListener("pointerdown", (e) => {
+    if (state.fix || !state.current || !$("clip").hidden) return;
+    start = { x: e.clientX, y: e.clientY };
+  });
+  split.addEventListener("pointerup", (e) => {
+    if (!start || state.fix) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
+    if (dy > SWIPE && dy > Math.abs(dx)) {
+      if (state.index >= state.queue.pairs.length - 1) toast("Dernière paire");
+      else showIndex(state.index + 1);
+    } else if (-dy > SWIPE && -dy > Math.abs(dx)) {
+      if (state.index === 0) toast("Première paire");
+      else showIndex(state.index - 1);
+    } else if (-dx > SWIPE && -dx > Math.abs(dy)) {
+      setMode("list");
+    }
+  });
+  split.addEventListener("pointercancel", () => { start = null; });
 }
 
 // ---- Liste ----
@@ -364,6 +400,7 @@ function renderList() {
       + '<div class="text"><span class="value"></span><span class="note"></span></div>'
       + '<div class="verdicts"></div>';
     fillVerdicts(row.querySelector(".verdicts"), (verdict) => pickRow(row, verdict));
+    rowGestures(row);
     const img = row.querySelector("img");
     img.onload = () => fillRow(row);
     img.src = pair.image;
@@ -378,21 +415,11 @@ function renderList() {
 function fillRow(row) {
   const pair = row.pair;
   const j = state.judgments[pair.id];
-  let text = pair.text;
-  let boxes = pair.boxes;
-  let note = "";
-  if (boxesMode()) {
-    if (j?.verdict === "wrong" && j.boxes) [boxes, note] = [j.boxes, "corrigé"];
-    else if (j?.verdict === "wrong") [boxes, note] = [[], "inutilisable"];
-    text = j?.verdict === "wrong" && !j.boxes ? "—" : boxesLabel(boxes);
-  } else if (j?.verdict === "wrong" && j.correct != null) {
-    [text, boxes, note] = [j.correct, j.boxes, "corrigé"];
-  } else if (j?.verdict === "wrong") {
-    [text, boxes, note] = ["—", [], "sans valeur"];
-  }
-  row.className = `row ${j?.verdict || ""}${boxesMode() ? " boxes" : ""}`;
-  row.querySelector(".value").textContent = text;
-  row.querySelector(".note").textContent = note;
+  const v = validated(pair);
+  const boxes = v.boxes;
+  row.className = `row ${j?.verdict || ""}${boxesMode() || v.text === "" ? " boxes" : ""}`;
+  row.querySelector(".value").textContent = shownText(v);
+  row.querySelector(".note").textContent = v.note;
   lightVerdicts(row.querySelector(".verdicts"), pair);
   const shot = row.querySelector(".shot");
   shot.querySelectorAll(".box").forEach((b) => b.remove());
@@ -415,20 +442,36 @@ function rowBoxes(shot, img, boxes) {
   }
 }
 
-// Liste : ✓ et ? jugent la ligne ; ✗ ouvre la correction (même sur une ligne déjà jugée, elle
-// repart de la lecture d'origine) ; ↺ la remet à « non jugée ».
+// Liste : ✓, ?, ⊘ jugent la ligne et ↺ l'efface ; ✗ ouvre l'écran partagé sur cette paire, en
+// édition (version corrigée en priorité).
 function pickRow(row, verdict) {
   if (verdict === "wrong") {
-    state.listScroll = $("list").scrollTop;
-    $("list").hidden = true;
-    $("split").hidden = false;
-    show(row.pair);
+    openPair(row.pair);
     openFix(row.pair);
     return;
   }
   if (verdict === "reset") clearJudgment(row.pair.id);
   else judge(row.pair, verdict);
   fillRow(row);
+}
+
+// Carte glissée à droite : l'écran partagé sur cette paire.
+function rowGestures(row) {
+  let start = null;
+  row.addEventListener("pointerdown", (e) => { start = { x: e.clientX, y: e.clientY }; });
+  row.addEventListener("pointerup", (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    start = null;
+    if (dx > SWIPE && dx > 1.5 * Math.abs(dy)) openPair(row.pair);
+  });
+  row.addEventListener("pointercancel", () => { start = null; });
+}
+
+function openPair(pair) {
+  state.index = state.queue.pairs.indexOf(pair);
+  setMode("split");
 }
 
 // ---- Correction (après « faux ») ----
@@ -442,17 +485,20 @@ const GRAB = 20; // px d'écran autour d'un coin pour le saisir
 const DOUBLE_TAP = 350; // ms
 const TAP_SLOP = 8; // px : en dessous, un appui qui bouge un peu reste un appui
 
+// L'édition part de la version corrigée si elle existe, sinon de la lecture du modèle.
 function openFix(pair) {
   closeContext();
   $("context").hidden = !pair.clip;
-  const text = boxesMode() ? "" : pair.text;
+  const v = validated(pair);
+  const start = v.note === "corrigé" ? v : { value: pair.text, boxes: pair.boxes };
+  const text = boxesMode() ? "" : start.value;
   state.fix = {
-    pair, value: text, cursor: text.length, boxes: boxesOf(pair), selected: null, lastTap: null,
+    pair, value: text, cursor: text.length, boxes: boxesOf({ boxes: start.boxes }), selected: null,
+    lastTap: null,
   };
-  // Mode boîtes : ni valeur ni pavé ; « Sans valeur » devient « Inutilisable ».
+  // Mode boîtes : ni valeur ni pavé.
   $("value").hidden = boxesMode();
   $("keypad").hidden = boxesMode();
-  $("fixNone").textContent = boxesMode() ? "Inutilisable" : "Sans valeur";
   $("panel").hidden = true;
   $("fix").hidden = false;
   fitImage(); // une seule fois : l'image ne change pas de taille pendant un glissé
@@ -469,19 +515,11 @@ function closeFix() {
   $("overlay").classList.remove("editable");
 }
 
+// Retour ou Valider : retour aux boutons, sur la même paire.
 function finishFix() {
   const pair = state.fix.pair;
   closeFix();
-  if (state.listScroll !== undefined && state.mode === "list") {
-    $("split").hidden = true;
-    $("list").hidden = false;
-    renderList();
-    $("list").scrollTop = state.listScroll;
-    state.listScroll = undefined;
-  } else {
-    next();
-  }
-  return pair;
+  show(pair);
 }
 
 function fixChanges() {
@@ -504,7 +542,7 @@ function renderFix() {
     $("fixOk").disabled = !changed;
     $("fixHint").textContent = changed
       ? `Corrigé : ${boxesLabel(boxes)}`
-      : `Corrige, ajoute (appui dans le vide) ou efface les boîtes ; aucune : pas de ${state.queue.object || "objet"}`;
+      : `Corrige, ajoute (appui dans le vide) ou efface les boîtes ; aucune : pas de ${state.queue.object || "objet"}. Identique à la proposition : ✓`;
     return;
   }
   const field = $("value");
@@ -530,7 +568,7 @@ function renderFix() {
   $("fixHint").textContent = !counts
     ? `${value.length} caractère(s) pour ${boxes.length} boîte(s)`
     : wrong.length === 0
-      ? "Corrige la valeur ou les boîtes, ou choisis « Sans valeur »"
+      ? "Identique à la lecture du modèle : c'est ✓. Rien à lire : « vide » et aucune boîte"
       : `Corrigé : ${wrong.map((w) => (w === "value" ? "valeur" : "boîtes")).join(" et ")}`;
 }
 
@@ -736,20 +774,7 @@ function fixWiring() {
     judge(pair, "wrong", { ...correct, boxes: roundBoxes(boxes), wrong });
     finishFix();
   };
-  $("fixNone").onclick = () => {
-    judge(state.fix.pair, "wrong", { correct: null, boxes: null, wrong: [] });
-    finishFix();
-  };
-  $("fixCancel").onclick = () => {
-    const pair = state.fix.pair;
-    closeFix();
-    if (state.listScroll !== undefined) {
-      state.listScroll = undefined;
-      render();
-    } else {
-      show(pair);
-    }
-  };
+  $("fixCancel").onclick = finishFix;
 }
 
 // ---- Ensemble ----
@@ -766,9 +791,21 @@ function render() {
   $("split").hidden = state.mode !== "split";
   $("list").hidden = state.mode !== "list";
   $("mode").textContent = state.mode === "split" ? "≡" : "▣";
-  if (state.mode === "split") next();
-  else renderList();
+  if (state.mode === "split") {
+    showIndex(state.index);
+  } else {
+    renderList();
+    // La liste s'ouvre sur la paire de l'écran partagé.
+    $("list").children[state.index]?.scrollIntoView({ block: "center" });
+  }
   updateProgress();
+}
+
+function setMode(mode) {
+  closeFix();
+  state.mode = mode;
+  store.set("approval:mode", mode);
+  if (state.queue) render();
 }
 
 function toast(text) {
@@ -802,29 +839,16 @@ function saveSettings() {
 
 function wire() {
   fillVerdicts($("verdicts"), pickSplit);
+  splitGestures();
   fixWiring();
   $("menu").onclick = () => { refreshQueues(); $("settings").showModal(); };
-  $("mode").onclick = () => {
-    state.mode = state.mode === "split" ? "list" : "split";
-    store.set("approval:mode", state.mode);
-    if (state.queue) render();
-  };
-  $("undo").onclick = undo;
+  $("mode").onclick = () => setMode(state.mode === "split" ? "list" : "split");
   $("send").onclick = send;
   $("doneClose").onclick = () => { state.doneClosed = true; updateProgress(); };
   // La progression rouvre le panneau de fin (pour envoyer).
   $("progress").onclick = () => { state.doneClosed = false; updateProgress(); };
   $("clearOk").onclick = () => clearJudgments(true);
   $("clearAll").onclick = () => clearJudgments(false);
-  $("random").onclick = () => {
-    const left = pending();
-    show(left[Math.floor(Math.random() * left.length)]);
-  };
-  $("doubtful").onclick = () => {
-    const left = pending().filter((p) => p.reason !== "sûr" && p.reason !== "échauffement");
-    left.sort((a, b) => a.confidence - b.confidence);
-    show(left[0] || pending()[0]);
-  };
   $("context").onclick = () => playContext(state.fix?.pair || state.current);
   $("clip").onclick = closeContext;
   // Appui long sur l'image ou les boîtes : pas de menu du navigateur (copier, télécharger…).
