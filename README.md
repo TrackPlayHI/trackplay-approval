@@ -15,36 +15,48 @@ L'app est générique : elle affiche n'importe quelle file de paires au format c
 
 ## Juger
 
-Les mêmes boutons dans les deux modes, en colonne à droite ; un seul est allumé, celui du jugement actuel de la paire :
+Les mêmes boutons dans les deux modes, en colonne à droite ; un seul est allumé, celui du jugement actuel de la paire. Un bouton juge la paire **sans changer de paire**.
 
 | Bouton | Sens |
 |---|---|
 | ✓ (vert) | juste |
-| ✗ (rouge) | faux : ouvre la correction |
-| ? (orange) | je ne sais pas |
+| ✗ (rouge) | faux : ouvre l'édition |
+| ? (orange) | je ne sais pas (rien ne change pour l'apprentissage) |
+| ⊘ (gris) | écarter : cette image ne doit servir ni à apprendre ni à mesurer (afficheur en train de changer, joueur devant le tableau, image coupée…) |
 | ↺ | remet la paire à « non jugée » |
 
-Rien n'est jugé sans bouton : ni en faisant défiler la liste, ni en changeant de mode.
+Partout, une paire montre **ce qui est validé** : la lecture du modèle, ou ta correction (« corrigé »), ou « — » (« écartée »). « vide » : rien à lire.
 
-- **Écran partagé** (par défaut). En haut, l'image, avec son origine (salle, champ, moment dans la vidéo : « BCNA Geispolsheim · Temps de jeu · 20:55 ») et des boutons : **Au hasard** pour une paire tirée au sort, **Douteux** pour la paire la moins sûre, **▶ Contexte** pour voir la vidéo autour de l'image (±3 s du tableau entier, le champ encadré en jaune puis en rouge au moment de la paire ; joué en boucle à la place de l'image, un appui le referme, aussi pendant une correction). Un appui long sur l'image n'ouvre pas le menu du navigateur. L'image est la plus grande possible sans jamais être déformée, et les boîtes suivent l'échelle de chaque axe : ce que tu vois est ce qui est enregistré. En bas, le résultat est affiché tout de suite : la valeur, et sur l'image la boîte de chaque caractère et un trait vertical au milieu. Après ✓ ou ?, l'app passe à la paire suivante ; **↶** en haut revient en arrière.
+**Glissés** (hors édition) :
+
+| Où | Glissé | Effet |
+|---|---|---|
+| écran partagé | vers le bas | paire suivante (ordre de la file, paires jugées comprises) |
+| écran partagé | vers le haut | paire précédente |
+| écran partagé | vers la gauche | la liste, placée sur cette paire |
+| liste | une carte vers la droite | l'écran partagé sur cette carte |
+
+Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire défiler la liste ne juge rien.
+
+- **Écran partagé** (par défaut, ouvert sur la première paire non jugée). En haut, l'image, avec son origine (salle, champ, moment dans la vidéo : « BCNA Geispolsheim · Temps de jeu · 20:55 ») et **▶ Contexte** pour voir la vidéo autour de l'image (±3 s du tableau entier, le champ encadré en jaune puis en rouge au moment de la paire ; joué en boucle à la place de l'image, un appui le referme, aussi pendant une édition). Un appui long sur l'image n'ouvre pas le menu du navigateur. L'image est la plus grande possible sans jamais être déformée, et les boîtes suivent l'échelle de chaque axe : ce que tu vois est ce qui est enregistré. En bas, le résultat (valeur, et sur l'image la boîte de chaque caractère et un trait vertical au milieu) et les boutons.
 - **Échauffement** : les 10 premières paires d'une file sont des paires très sûres (modèle et étiquette d'accord), pour prendre la main ; elles comptent comme les autres.
-- **Liste** (bouton ≡ / ▣). Chaque ligne montre l'image avec la boîte de chaque caractère, la valeur et ses boutons. Une fois jugée, elle montre ce qui a été validé : la lecture, ou ta correction (« corrigé »), ou rien (« sans valeur »). ✗ sur une ligne déjà jugée rouvre la correction depuis la lecture d'origine.
-- **Faux → correction.** ✗ (en écran partagé comme en liste) ouvre la correction à la place du panneau noir :
+- **Liste** (glissé à gauche, ou ≡). Chaque carte montre l'image avec ses boîtes, ce qui est validé et ses boutons. ✗ ouvre l'écran partagé sur cette carte, en édition.
+- **Édition** (après ✗, en écran partagé comme depuis la liste). Elle part de **ta correction si elle existe**, sinon de la lecture du modèle :
   - sur l'image, **une boîte par caractère** (rectangle qui l'englobe, coins haut-gauche et bas-droite), proposée par le modèle, avec le caractère au-dessus ; on ne corrige que les fausses :
     - **glisser un coin** (rond bleu) redimensionne la boîte ;
     - **glisser l'intérieur** déplace la boîte ;
     - **appuyer dans le vide** ajoute une boîte, de la taille des autres, à ajuster ;
     - **toucher** une boîte la sélectionne (en blanc) et fait apparaître la **poubelle** 🗑 sous l'image : glisser la boîte dessus l'efface, la toucher efface la boîte sélectionnée ;
     - **double appui** sur une boîte l'efface aussi ;
-  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. La boîte du caractère juste avant le curseur a son caractère souligné. Pavé de téléphone, séparateurs à droite (`1 2 3 -` / `4 5 6 :` / `7 8 9 .` / `? 0 ⌫ vide`) : `?` caractère illisible (en orange), ⌫ efface, « vide » rien à lire ;
-  - **Valider** n'est possible que si la valeur a **autant de caractères que de boîtes**, et si quelque chose a changé ;
-  - **Sans valeur** : faux, sans correction (illisible pour toi aussi). **↶** revient à la paire sans rien juger.
+  - en dessous, **la valeur**, avec un **curseur** : toucher un caractère place le curseur juste avant ou juste après lui ; le pavé insère au curseur et ⌫ efface le caractère avant lui. La boîte du caractère juste avant le curseur a son caractère souligné. Pavé de téléphone, séparateurs à droite (`1 2 3 -` / `4 5 6 :` / `7 8 9 .` / `? 0 ⌫ vide`) : `?` caractère illisible (en orange), ⌫ efface, « vide » vide la valeur ;
+  - **rien à lire** (afficheur éteint) : « vide » et toutes les boîtes effacées ; c'est une vraie étiquette, le modèle apprend à ne rien trouver ;
+  - **Valider** n'est possible que si la valeur a **autant de caractères que de boîtes** (zéro compris), et si le résultat diffère de la lecture du modèle (sinon, c'est ✓) ; on revient aux boutons, ✗ allumé, la correction affichée ;
+  - **Retour** revient aux boutons sans rien changer.
 
   L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
-- **Files « boîtes seules »** (`kind` : `boxes`, comme la file du ballon) : pas de valeur à lire, seulement des boîtes. Le résultat dit « aucun ballon », « 1 ballon »… ; ✓ valide les boîtes proposées (aucune : pas de ballon) ; ✗ ouvre la correction des boîtes, sans pavé : un appui dans le vide ajoute une boîte carrée (taille habituelle de l'objet), on ajuste ou on efface comme pour les caractères, puis **Valider** ; **Inutilisable** écarte la vignette (floue, coupée…). **Exemple ballon** dans les réglages en montre une.
-- **↶** (en haut) annule le dernier jugement.
+- **Files « boîtes seules »** (`kind` : `boxes`, comme la file du ballon) : pas de valeur à lire, seulement des boîtes. Le résultat dit « aucun ballon », « 1 ballon »… ; ✓ valide les boîtes proposées (aucune : pas de ballon) ; ✗ ouvre l'édition des boîtes, sans pavé : un appui dans le vide ajoute une boîte carrée (taille habituelle de l'objet), on ajuste ou on efface comme pour les caractères (toutes effacées : aucun ballon), puis **Valider** ; ⊘ écarte la vignette (floue, coupée…). **Exemple ballon** dans les réglages en montre une.
 - À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là. Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
-- Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 15 ?)`, avec l'appareil, la date et le fichier dans le corps du message.
+- Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 10 ?, 5 ⊘)`, avec l'appareil, la date et le fichier dans le corps du message.
 - ☰ Réglages, pour la file chargée (avec confirmation ; ce qui est déjà envoyé reste dans le dépôt) : **Effacer les justes** (garde les corrections et les « ? ») ou **Tout effacer**.
 
 ## Formats
@@ -93,9 +105,10 @@ Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 ]
 ```
 
-`verdict` vaut `ok` (juste), `wrong` (faux) ou `unknown` (je ne sais pas).
+`verdict` vaut `ok` (juste), `wrong` (faux), `unknown` (je ne sais pas) ou `discard` (écartée).
 - Une paire juste devient une étiquette pour l'entraînement suivant, avec ses boîtes.
-- Une paire fausse **corrigée** (`correct`, avec les `boxes`) donne l'étiquette juste et les boîtes justes. Une paire fausse sans valeur (`correct` à `null`) retire l'étiquette de cet échantillon.
+- Une paire fausse **corrigée** (`correct`, avec les `boxes`) donne l'étiquette juste et les boîtes justes ; `correct` vide et aucune boîte : rien à lire, une vraie étiquette.
+- Une paire **écartée** retire l'étiquette de cet échantillon (les anciens jugements « faux » sans `correct` comptent comme écartés).
 
 ## Développement
 

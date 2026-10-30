@@ -23,7 +23,7 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #progress { flex: 1; text-align: right; color: var(--muted); font-size: 14px; }
 
 /* Écran partagé */
-#split { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#split { flex: 1; display: flex; flex-direction: column; min-height: 0; touch-action: none; }
 #top { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; padding: 12px; min-height: 0; }
 #frame { position: relative; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
@@ -63,23 +63,26 @@ body.boxes #top { flex: 1.6; }
 
 #panel { flex: 1; background: var(--panel); position: relative; display: flex; align-items: center;
   padding: 12px; user-select: none; -webkit-user-select: none; }
-#answer { flex: 1; text-align: center; font-size: 64px; font-weight: 700; letter-spacing: 4px; }
+#result { flex: 1; text-align: center; }
+#answer { font-size: 64px; font-weight: 700; letter-spacing: 4px; }
 #answer.label, .row.boxes .value { font-size: 28px; letter-spacing: 0; }
 
 /* Boutons de jugement, en colonne à droite : un seul allumé, celui du jugement de la paire. */
 .verdicts { display: flex; flex-direction: column; gap: 10px; }
-.verdict { width: 56px; height: 52px; padding: 0; font-size: 26px; font-weight: 700; background: #222;
+.verdict { width: 56px; height: 46px; padding: 0; font-size: 26px; font-weight: 700; background: #222;
   border: 2px solid #333; }
 .verdict.ok { color: var(--ok); }
 .verdict.wrong { color: var(--wrong); }
 .verdict.unknown { color: var(--unknown); }
+.verdict.discard { color: #b0b0b0; }
 .verdict.reset { color: var(--muted); font-size: 22px; }
 .verdict.on { color: #fff; border-color: #fff; }
 .verdict.ok.on { background: var(--ok); }
 .verdict.wrong.on { background: var(--wrong); }
 .verdict.unknown.on { background: var(--unknown); }
-.row .verdicts { gap: 6px; }
-.row .verdict { width: 44px; height: 38px; font-size: 20px; }
+.verdict.discard.on { background: #666; }
+.row .verdicts { gap: 5px; }
+.row .verdict { width: 42px; height: 34px; font-size: 18px; }
 
 /* Correction */
 #fix { flex: 1; background: var(--panel); display: flex; flex-direction: column; align-items: center;
@@ -108,6 +111,8 @@ body.boxes #top { flex: 1.6; }
 .row.ok { border-left: 6px solid var(--ok); }
 .row.wrong { border-left: 6px solid var(--wrong); }
 .row.unknown { border-left: 6px solid var(--unknown); }
+.row.discard { border-left: 6px solid #666; }
+.row { touch-action: pan-y; }
 
 #done { position: fixed; inset: auto 16px 24px 16px; background: #222; border-radius: 12px;
   padding: 16px; text-align: center; }
