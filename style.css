@@ -32,23 +32,29 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 /* Vignettes carrées (files « boîtes seules ») : le clip pas plus de 38 % de la hauteur. */
 body.boxes #clip { max-width: min(100%, 38vh); }
 body.boxes #top { flex: 1.6; }
-#overlay { position: absolute; inset: 0; margin: 0 auto; max-width: 640px; pointer-events: none; }
+/* Zoom : #zoom grossit image et boîtes ensemble (transform) dans #stage, à la taille de l'image ;
+   --z garde à l'écran l'épaisseur des traits, des coins et des caractères. */
+#stage { position: relative; overflow: hidden; touch-action: none; border-radius: 4px; }
+#zoom { position: relative; transform-origin: 0 0; --z: 1; line-height: 0; }
+#lens { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 4px 10px; font-size: 15px;
+  line-height: 1.2; background: #000a; border: 1px solid #fff6; border-radius: 14px; }
+#overlay { position: absolute; left: 0; top: 0; pointer-events: none; line-height: normal; }
 #overlay.editable { pointer-events: auto; touch-action: none; }
 /* Boîte de chaque caractère (coins haut-gauche et bas-droite), son caractère au-dessus. */
-#overlay .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px;
+#overlay .box { position: absolute; border: calc(2px / var(--z)) solid var(--accent); border-radius: 2px;
   box-sizing: border-box; }
-#overlay .box span { position: absolute; top: -26px; left: 0; right: 0; text-align: center;
+#overlay .box span { position: absolute; top: calc(-26px / var(--z)); font-size: calc(16px / var(--z)); left: 0; right: 0; text-align: center;
   font-weight: 700; color: #fff; }
 #overlay .box span.unknown, #value .unknown, #keypad .unknown { color: var(--unknown); }
-#overlay .box .corner { position: absolute; width: 14px; height: 14px; border-radius: 50%;
+#overlay .box .corner { position: absolute; width: calc(14px / var(--z)); height: calc(14px / var(--z)); border-radius: 50%;
   background: var(--accent); }
-#overlay .box .corner.tl { left: -8px; top: -8px; }
-#overlay .box .corner.br { right: -8px; bottom: -8px; }
-#overlay .middle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: #fff8; }
+#overlay .box .corner.tl { left: calc(-8px / var(--z)); top: calc(-8px / var(--z)); }
+#overlay .box .corner.br { right: calc(-8px / var(--z)); bottom: calc(-8px / var(--z)); }
+#overlay .middle { position: absolute; top: 0; bottom: 0; left: 50%; width: calc(2px / var(--z)); background: #fff8; }
 #trash { position: absolute; right: 0; bottom: -60px; z-index: 2; font-size: 26px; padding: 8px 12px;
   background: #2a2a2a; border: 2px solid transparent; }
 #trash.hot { background: var(--wrong); border-color: #fff; }
-#overlay .box.selected { border-color: #fff; border-width: 3px; }
+#overlay .box.selected { border-color: #fff; border-width: calc(3px / var(--z)); }
 #overlay .box.selected .corner { background: #fff; }
 #overlay .box.current span { text-decoration: underline; }
 #value .caret { display: inline-block; width: 3px; height: 1em; margin: 0 1px; vertical-align: -0.1em;

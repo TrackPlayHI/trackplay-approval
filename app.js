@@ -206,6 +206,7 @@ async function playContext(pair) {
     const blob = state.demo
       ? await (await fetch(`sample/${pair.clip}`)).blob()
       : await github(`contents/queues/${pair.clip}`, { raw: true, blob: true });
+    resetZoom();
     if (clip.src) URL.revokeObjectURL(clip.src);
     clip.src = URL.createObjectURL(blob);
     clip.hidden = false;
@@ -227,6 +228,7 @@ function closeContext() {
 
 function show(pair) {
   closeContext();
+  if (pair !== state.current) resetZoom(); // nouvelle paire : image entière
   state.current = pair || null;
   $("answer").textContent = "";
   $("overlay").innerHTML = "";
@@ -282,6 +284,96 @@ function fitImage() {
   const scale = Math.min(width / image.naturalWidth, Math.max(60, free) / image.naturalHeight);
   image.style.width = `${image.naturalWidth * scale}px`;
   image.style.height = `${image.naturalHeight * scale}px`;
+  $("stage").style.width = image.style.width;
+  $("stage").style.height = image.style.height;
+  applyZoom();
+}
+
+// ---- Zoom de l'image (écran partagé) ----
+// Deux doigts : écarter ou rapprocher zoome (jusqu'à ×16) et déplace l'image ; image zoomée, un
+// doigt la déplace aussi (hors édition : en édition, un doigt sert aux boîtes). La pastille loupe
+// « ×N » remet l'image entière. Changer de paire, de mode ou lancer le contexte la remet aussi.
+
+const ZOOM_MAX = 16;
+const zoom = { s: 1, x: 0, y: 0 };
+
+function applyZoom() {
+  const stage = $("stage");
+  const w = stage.clientWidth;
+  const h = stage.clientHeight;
+  zoom.s = Math.min(ZOOM_MAX, Math.max(1, zoom.s));
+  zoom.x = Math.min(0, Math.max(w - w * zoom.s, zoom.x));
+  zoom.y = Math.min(0, Math.max(h - h * zoom.s, zoom.y));
+  const z = $("zoom");
+  z.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
+  z.style.setProperty("--z", zoom.s);
+  const lens = $("lens");
+  lens.hidden = zoom.s < 1.05;
+  const factor = zoom.s < 10 ? Math.round(zoom.s * 10) / 10 : Math.round(zoom.s);
+  lens.textContent = `🔍 ×${String(factor).replace(".", ",")}`;
+}
+
+function resetZoom() {
+  Object.assign(zoom, { s: 1, x: 0, y: 0 });
+  applyZoom();
+}
+
+function zoomGestures() {
+  const stage = $("stage");
+  const pointers = new Map(); // pointerId -> { x, y }
+  let gesture = null; // départ du geste : zoom, point de l'image sous les doigts
+  const center = () => {
+    const list = [...pointers.values()];
+    const r = stage.getBoundingClientRect();
+    const x = list.reduce((a, p) => a + p.x, 0) / list.length - r.left;
+    const y = list.reduce((a, p) => a + p.y, 0) / list.length - r.top;
+    const d = list.length > 1 ? Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) : 0;
+    return { x, y, d };
+  };
+  const begin = () => {
+    const c = center();
+    // Point de l'image (non zoomée) sous les doigts : il y reste pendant le geste.
+    gesture = { s: zoom.s, d: c.d, px: (c.x - zoom.x) / zoom.s, py: (c.y - zoom.y) / zoom.s };
+  };
+  // Phase de capture : avant les boîtes de l'édition et les glissés de navigation.
+  stage.addEventListener("pointerdown", (e) => {
+    if (e.target.id === "lens") return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const moving = pointers.size > 1 || (zoom.s > 1 && !state.fix);
+    if (!moving) return; // un doigt : boîtes en édition, navigation sinon
+    if (pointers.size > 1) state.cancelDrag?.(); // le premier doigt ne déplace plus de boîte
+    state.cancelSwipe?.();
+    stage.setPointerCapture(e.pointerId);
+    e.stopPropagation();
+    begin();
+  }, true);
+  stage.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!gesture) return;
+    e.stopPropagation();
+    const c = center();
+    if (pointers.size > 1 && gesture.d > 0) zoom.s = gesture.s * (c.d / gesture.d);
+    zoom.x = c.x - gesture.px * zoom.s;
+    zoom.y = c.y - gesture.py * zoom.s;
+    applyZoom();
+  }, true);
+  const end = (e) => {
+    if (!pointers.delete(e.pointerId)) return;
+    if (gesture) e.stopPropagation();
+    if (!pointers.size) {
+      gesture = null;
+    } else if (gesture) {
+      begin(); // un doigt levé : on continue avec ceux qui restent
+    }
+  };
+  stage.addEventListener("pointerup", end, true);
+  stage.addEventListener("pointercancel", end, true);
+  $("lens").addEventListener("pointerdown", (e) => e.stopPropagation());
+  $("lens").onclick = (e) => {
+    e.stopPropagation();
+    resetZoom();
+  };
 }
 
 // Échelle de chaque axe, de l'image d'origine à l'écran : ce qui est vu est ce qui est enregistré,
@@ -369,10 +461,12 @@ function splitGestures() {
   let start = null;
   split.addEventListener("pointerdown", (e) => {
     if (state.fix || !state.current || !$("clip").hidden) return;
-    start = { x: e.clientX, y: e.clientY };
+    start = { x: e.clientX, y: e.clientY, id: e.pointerId };
   });
+  // Un geste de zoom commence : ce n'était pas un glissé de navigation.
+  state.cancelSwipe = () => { start = null; };
   split.addEventListener("pointerup", (e) => {
-    if (!start || state.fix) return;
+    if (!start || start.id !== e.pointerId || state.fix) return;
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
     start = null;
@@ -655,14 +749,23 @@ function overlayGestures() {
   let drag = null;
   const imagePoint = (e) => {
     const image = $("image");
-    const rect = image.getBoundingClientRect();
-    const { sx, sy } = imageScale();
+    const rect = image.getBoundingClientRect(); // à l'écran, zoom compris
+    const sx = rect.width / image.naturalWidth;
+    const sy = rect.height / image.naturalHeight;
     return {
       x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / sx)),
       y: Math.min(image.naturalHeight, Math.max(0, (e.clientY - rect.top) / sy)),
       sx,
       sy,
     };
+  };
+  // Deux doigts posés : le geste devient un zoom, la boîte reprend sa place d'avant.
+  state.cancelDrag = () => {
+    if (!drag || !state.fix) return;
+    if (drag.added) state.fix.boxes.splice(state.fix.boxes.indexOf(drag.box), 1);
+    else drag.box.splice(0, 4, ...drag.start);
+    drag = null;
+    renderFix();
   };
   overlay.addEventListener("pointerdown", (e) => {
     const fix = state.fix;
@@ -804,6 +907,7 @@ function render() {
 
 function setMode(mode) {
   closeFix();
+  resetZoom();
   state.mode = mode;
   store.set("approval:mode", mode);
   if (state.queue) render();
@@ -841,6 +945,7 @@ function saveSettings() {
 function wire() {
   fillVerdicts($("verdicts"), pickSplit);
   splitGestures();
+  zoomGestures();
   fixWiring();
   $("menu").onclick = () => { refreshQueues(); $("settings").showModal(); };
   $("mode").onclick = () => setMode(state.mode === "split" ? "list" : "split");

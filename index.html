@@ -21,8 +21,14 @@
   <main id="split">
     <section id="top">
       <div id="frame">
-        <img id="image" alt="Image à valider" draggable="false">
-        <div id="overlay"></div>
+        <!-- Zoom : deux doigts (jusqu'à ×16), la pastille loupe remet l'image entière. -->
+        <div id="stage">
+          <div id="zoom">
+            <img id="image" alt="Image à valider" draggable="false">
+            <div id="overlay"></div>
+          </div>
+          <button id="lens" type="button" aria-label="Image entière" hidden></button>
+        </div>
         <video id="clip" muted loop playsinline hidden></video>
         <button id="trash" type="button" aria-label="Glisser un point ici pour l'effacer" hidden>🗑</button>
       </div>
