@@ -1,7 +1,7 @@
 // Approval : valider d'un geste les paires « image + résultat » proposées par un modèle.
 // Boutons de jugement, les mêmes dans les deux modes : ✓ juste, ✗ faux (ouvre l'édition),
 // ? je ne sais pas, ⊘ écarter (image à ne pas apprendre), ↺ remet la paire à « non jugée ».
-// Glissés (écran partagé, hors édition) : bas = suivante, haut = précédente, gauche = liste ;
+// Glissés (écran partagé, hors édition) : haut = suivante, bas = précédente, gauche = liste ;
 // en liste, une carte glissée à droite s'ouvre dans l'écran partagé.
 "use strict";
 
@@ -362,7 +362,8 @@ function pickSplit(verdict) {
   show(pair);
 }
 
-// Glissés de l'écran partagé, hors édition : bas = suivante, haut = précédente, gauche = liste.
+// Glissés de l'écran partagé, hors édition : haut = suivante (comme un fil qu'on fait défiler),
+// bas = précédente, gauche = liste.
 function splitGestures() {
   const split = $("split");
   let start = null;
@@ -375,10 +376,10 @@ function splitGestures() {
     const dx = e.clientX - start.x;
     const dy = e.clientY - start.y;
     start = null;
-    if (dy > SWIPE && dy > Math.abs(dx)) {
+    if (-dy > SWIPE && -dy > Math.abs(dx)) {
       if (state.index >= state.queue.pairs.length - 1) toast("Dernière paire");
       else showIndex(state.index + 1);
-    } else if (-dy > SWIPE && -dy > Math.abs(dx)) {
+    } else if (dy > SWIPE && dy > Math.abs(dx)) {
       if (state.index === 0) toast("Première paire");
       else showIndex(state.index - 1);
     } else if (-dx > SWIPE && -dx > Math.abs(dy)) {
