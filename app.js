@@ -193,29 +193,44 @@ function boxesLabel(boxes) {
   return n === 0 ? `aucun ${object}` : `${n} ${object}${n > 1 ? "s" : ""}`;
 }
 
-// Ce qui est validé pour une paire, montré partout (écran partagé, liste, point de départ de
-// l'édition) : juste ou non jugée : la lecture du modèle ; corrigée : la correction ; écartée
-// (ou ancien « faux sans valeur ») : rien.
+// Ce qui est montré pour une image, partout (écran partagé, liste, point de départ de l'édition) :
+// **J écrase M**. J, le jugement, porte sa propre valeur (juste : le texte et les boîtes validés ;
+// corrigé : la correction ; écarté : rien) ; sans J (ou « ? »), M, la lecture de la file.
+// `fromJ` : la valeur vient de J. Un jugement fait sur une autre version de la file est signalé
+// (« jugé en v2 »), et si la lecture de cette file diffère (« v3 lit 4:18 »).
 function validated(pair) {
   const j = judgmentOf(pair);
   const corrected = j?.verdict === "wrong" && (boxesMode() ? j.boxes != null : j.correct != null);
   const discarded = j?.verdict === "discard" || (j?.verdict === "wrong" && !corrected);
-  if (discarded) return { text: "—", boxes: [], note: "écartée", discarded: true };
-  const text = corrected && !boxesMode() ? j.correct : pair.text;
-  const boxes = corrected ? j.boxes : pair.boxes;
-  return { text: boxesMode() ? boxesLabel(boxes) : text, value: text, boxes, note: corrected ? "corrigé" : "" };
+  const other = j?.queue && j.queue !== state.queue.name ? `jugé en ${versionOf(j.queue)}` : "";
+  const notes = (...n) => n.filter(Boolean).join(" · ");
+  if (discarded) return { text: "—", boxes: [], note: notes("écartée", other), discarded: true, fromJ: false };
+  const fromJ = Boolean(j) && (j.verdict === "ok" || corrected);
+  const text = !fromJ ? pair.text : corrected && !boxesMode() ? j.correct : (j.text ?? pair.text);
+  const boxes = fromJ && j.boxes ? j.boxes : pair.boxes;
+  const differs = fromJ && other && !boxesMode() && text !== pair.text
+    ? `${versionOf(state.queue.name)} lit ${pair.text || "vide"}` : "";
+  return {
+    text: boxesMode() ? boxesLabel(boxes) : text, value: text, boxes, fromJ,
+    note: notes(corrected && "corrigé", other, differs),
+  };
 }
+
+// Version d'une file : « score-text-v2 » → « v2 ».
+function versionOf(name) { return name.match(/-(v\d+)$/)?.[1] || name; }
 
 // Valeur affichée : « vide » quand il n'y a rien à lire.
 function shownText(v) { return v.text === "" ? "vide" : v.text; }
 
 function pending() { return state.queue.pairs.filter((p) => !judgmentOf(p)); }
 
+// Un jugement (J) porte sa valeur et sa file d'origine. Juste : la lecture et les boîtes de M sont
+// copiées dans J.
 function judge(pair, verdict, extra = {}) {
-  // Juste : les boîtes proposées sont validées avec le texte.
   const boxes = verdict === "ok" && pair.boxes ? { boxes: roundBoxes(pair.boxes) } : {};
   state.judgments[pair.id] = {
-    id: pair.id, text: pair.text, verdict, ...boxes, ...extra, at: new Date().toISOString(),
+    id: pair.id, text: pair.text, verdict, ...boxes, ...extra, queue: state.queue.name,
+    at: new Date().toISOString(),
   };
   store.set(judgmentsKey(), state.judgments);
   updateProgress();
@@ -524,13 +539,19 @@ function lightVerdicts(column, pair) {
   for (const b of column.children) b.classList.toggle("on", b.dataset.verdict === verdict);
 }
 
+// ✓, ?, ⊘ et ↺ (les deux modes). ✓ dit « ce qui est montré est juste » : montré depuis M, la
+// lecture devient J ; montré depuis J (juste ou corrigé), J reste tel quel.
+function pick(pair, verdict) {
+  if (verdict === "reset") clearJudgment(pair.id);
+  else if (verdict !== "ok" || !validated(pair).fromJ) judge(pair, verdict);
+}
+
 // Écran partagé : ✓, ?, ⊘ jugent la paire et ↺ l'efface, sans changer de paire ; ✗ ouvre l'édition.
 function pickSplit(verdict) {
   const pair = state.current;
   if (!pair || state.fix) return;
   if (verdict === "wrong") return openFix(pair);
-  if (verdict === "reset") clearJudgment(pair.id);
-  else judge(pair, verdict);
+  pick(pair, verdict);
   show(pair);
 }
 
@@ -625,8 +646,7 @@ function pickRow(row, verdict) {
     openFix(row.pair);
     return;
   }
-  if (verdict === "reset") clearJudgment(row.pair.id);
-  else judge(row.pair, verdict);
+  pick(row.pair, verdict);
   fillRow(row);
 }
 
@@ -665,7 +685,7 @@ function openFix(pair) {
   closeContext();
   $("context").hidden = !pair.clip;
   const v = validated(pair);
-  const start = v.note === "corrigé" ? v : { value: pair.text, boxes: pair.boxes };
+  const start = v.fromJ && !v.discarded ? v : { value: pair.text, boxes: pair.boxes };
   const text = boxesMode() ? "" : start.value;
   state.fix = {
     pair, value: text, cursor: text.length, boxes: boxesOf({ boxes: start.boxes }), selected: null,

@@ -4,6 +4,14 @@ Petite app web pour **valider d'un geste** les résultats proposés par les mod�
 
 L'app est générique : elle affiche n'importe quelle file de paires au format ci-dessous (chiffres du tableau aujourd'hui, boîtes de joueurs demain).
 
+## Le principe : M et J
+
+- **M**, ce que propose un modèle : une **file** `queues/<famille>-vN.json` par version du modèle (sa lecture et ses boîtes pour 200 images douteuses).
+- **J**, ce que tu juges : un seul fichier par famille, `judgments/<famille>.json`, pour toutes les versions. Chaque jugement porte sa valeur (texte, boîtes), son verdict, sa file d'origine et son heure.
+- **Pour une image, J écrase M** : l'app montre J s'il existe, sinon M ; l'entraînement suivant apprend avec J. Un jugement fait sur une autre version est signalé (« jugé en v2 », et « v3 lit 4:18 » si la nouvelle lecture diffère).
+
+Le cycle complet (étiquettes, entraînement, M, J) : README de [trackplay-models](https://github.com/TrackPlayHI/trackplay-models#le-cycle-en-bref).
+
 ## Installer sur le téléphone
 
 1. Ouvrir l'adresse GitHub Pages du dépôt dans Chrome, puis menu ⋮ → **Ajouter à l'écran d'accueil**. L'app s'ouvre ensuite en plein écran, comme une app, et fonctionne hors ligne une fois la file chargée.
