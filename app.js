@@ -962,8 +962,8 @@ function overlayGestures() {
 function fixWiring() {
   overlayGestures();
   valueGestures();
-  // Pavé de téléphone, séparateurs à droite.
-  for (const k of ["1", "2", "3", "-", "4", "5", "6", ":", "7", "8", "9", ".", "?", "0", "⌫", "vide"]) {
+  // Pavé de calculatrice (7 8 9 en haut), séparateurs à droite.
+  for (const k of ["7", "8", "9", "-", "4", "5", "6", ":", "1", "2", "3", ".", "?", "0", "⌫", "vide"]) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = k;
