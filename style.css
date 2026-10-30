@@ -26,10 +26,11 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #split { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 #top { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; padding: 12px; min-height: 0; }
-#frame { position: relative; width: 100%; max-height: 100%; display: flex; justify-content: center; }
-#image { width: 100%; max-width: 640px; image-rendering: pixelated; border-radius: 4px; }
-/* Vignettes carrées (files « boîtes seules ») : pas plus de 38 % de la hauteur. */
-body.boxes #image, body.boxes #clip, body.boxes #overlay { max-width: min(100%, 38vh); }
+#frame { position: relative; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
+/* Taille posée par fitImage (proportions gardées). */
+#image { image-rendering: pixelated; border-radius: 4px; }
+/* Vignettes carrées (files « boîtes seules ») : le clip pas plus de 38 % de la hauteur. */
+body.boxes #clip { max-width: min(100%, 38vh); }
 body.boxes #top { flex: 1.6; }
 #overlay { position: absolute; inset: 0; margin: 0 auto; max-width: 640px; pointer-events: none; }
 #overlay.editable { pointer-events: auto; touch-action: none; }
