@@ -25,7 +25,7 @@ const state = {
   device: store.get("approval:device", null) || Math.random().toString(36).slice(2, 8),
   queue: null, // { name, pairs: [{ id, image, text, boxes, confidence, reason }] }
   demo: false,
-  judgments: {}, // id -> { id, text, verdict, at }
+  judgments: {}, // id -> { id, text, verdict, at } de la famille de la file (« reset » : non jugée)
   index: 0, // paire de l'écran partagé, dans l'ordre de la file
   current: null,
   mode: store.get("approval:mode", "split"),
@@ -61,47 +61,124 @@ function base64(text) {
   return btoa(binary);
 }
 
-async function send() {
-  const list = Object.values(state.judgments);
-  if (!list.length) return toast("Aucun jugement à envoyer");
-  if (state.demo) return toast(`Exemple : ${list.length} jugements, rien n'est envoyé`);
-  const now = new Date();
-  const stamp = now.toISOString().replace(/[:.]/g, "-");
-  const path = `judgments/${state.queue.name}/${state.device}-${stamp}.json`;
+// ---- Jugements dans le dépôt : un fichier par famille (judgments/<famille>.json) ----
+// Partagé par toutes les versions des files de la famille ; à chaque envoi, l'app relit le
+// fichier, fusionne (pour une même image, le plus récent selon `at` l'emporte, « reset » compris),
+// le réécrit trié par identifiant et recommence si quelqu'un l'a changé entre-temps.
+
+function judgmentsPath() { return `judgments/${familyOf(state.queue)}.json`; }
+
+function decodeBase64(text) {
+  const binary = atob(text.replace(/\n/g, ""));
+  return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)));
+}
+
+// Fichier de la famille dans le dépôt : { list, sha } (vide s'il n'existe pas encore).
+async function readRemote() {
+  const url = `https://api.github.com/repos/${state.settings.repo}/contents/${judgmentsPath()}`;
+  const headers = { Authorization: `Bearer ${state.settings.token}`, Accept: "application/vnd.github+json" };
+  const response = await fetch(url, { headers, cache: "no-store" });
+  if (response.status === 404) return { list: [], sha: null };
+  if (!response.ok) throw new Error(`GitHub ${response.status}`);
+  const file = await response.json();
+  const text = file.content
+    ? decodeBase64(file.content)
+    : await github(`contents/${judgmentsPath()}`, { raw: true }); // gros fichier : sans contenu
+  return { list: JSON.parse(text), sha: file.sha };
+}
+
+// Fusion : pour chaque image, le jugement le plus récent.
+function mergeJudgments(target, list) {
+  for (const j of list) {
+    const mine = target[j.id];
+    if (!mine || (j.at || "") > (mine.at || "")) target[j.id] = j;
+  }
+  return target;
+}
+
+// À l'ouverture d'une file : les jugements déjà dans le dépôt (autres versions, autres appareils).
+async function pullJudgments() {
+  if (state.demo || !state.settings.token) return;
   try {
-    await github(`contents/${path}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        message: commitMessage(list, path, now),
-        content: base64(JSON.stringify(list, null, 1) + "\n"),
-      }),
-    });
-    toast(`${list.length} jugements envoyés`);
+    const { list } = await readRemote();
+    mergeJudgments(state.judgments, list);
+    store.set(judgmentsKey(), state.judgments);
+    render();
   } catch (error) {
-    toast(`Envoi impossible : ${error.message}`);
+    toast(`Jugements du dépôt non lus : ${error.message}`);
   }
 }
 
+async function send() {
+  const mine = Object.values(state.judgments);
+  if (!mine.length) return toast("Aucun jugement à envoyer");
+  if (state.demo) return toast(`Exemple : ${mine.length} jugements, rien n'est envoyé`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { list, sha } = await readRemote();
+      const merged = mergeJudgments(Object.fromEntries(list.map((j) => [j.id, j])), mine);
+      const sorted = Object.values(merged).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const response = await fetch(
+        `https://api.github.com/repos/${state.settings.repo}/contents/${judgmentsPath()}`,
+        {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${state.settings.token}`, Accept: "application/vnd.github+json" },
+          body: JSON.stringify({
+            message: commitMessage(sorted, new Date()),
+            content: base64(JSON.stringify(sorted, null, 1) + "\n"),
+            ...(sha ? { sha } : {}),
+          }),
+        },
+      );
+      if (response.status === 409 || response.status === 422) continue; // changé entre-temps
+      if (!response.ok) throw new Error(`GitHub ${response.status} : ${(await response.text()).slice(0, 120)}`);
+      state.judgments = merged;
+      store.set(judgmentsKey(), state.judgments);
+      render();
+      return toast(`${mine.length} jugements envoyés (${familyOf(state.queue)})`);
+    } catch (error) {
+      return toast(`Envoi impossible : ${error.message}`);
+    }
+  }
+  toast("Envoi impossible : le fichier change sans cesse, réessaie");
+}
+
 // Message de commit facile à retrouver (préfixe « Approval · ») :
-// « Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 15 ?) ».
-function commitMessage(list, path, now) {
+// « Approval · score-text : 214 jugements (171 ✓, 14 ✗, 10 ?, 5 ⊘), file score-text-v2 ».
+function commitMessage(list, now) {
   const count = (v) => list.filter((j) => j.verdict === v).length;
-  return `Approval · ${state.queue.name} : ${list.length} jugements `
-    + `(${count("ok")} ✓, ${count("wrong")} ✗, ${count("unknown")} ?, ${count("discard")} ⊘)\n\n`
+  const judged = list.filter((j) => j.verdict !== "reset").length;
+  return `Approval · ${familyOf(state.queue)} : ${judged} jugements `
+    + `(${count("ok")} ✓, ${count("wrong")} ✗, ${count("unknown")} ?, ${count("discard")} ⊘), `
+    + `file ${state.queue.name}\n\n`
     + `Appareil ${state.device}, ${now.toISOString().slice(0, 16).replace("T", " ")} UTC.\n`
-    + `Fichier : ${path}\n`;
+    + `Fichier : ${judgmentsPath()}\n`;
 }
 
 // ---- File et jugements ----
 
-function judgmentsKey() { return `approval:${state.queue.name}:judgments`; }
+// Famille d'une file : `family`, sinon son nom sans la version (« score-text-v3 » → « score-text »).
+function familyOf(queue) { return queue.family || queue.name.replace(/-v\d+$/, ""); }
+
+// Jugements gardés sur le téléphone par famille ; ceux d'avant (par file) y sont repris.
+function judgmentsKey() { return `approval:judgments:${familyOf(state.queue)}`; }
+
+function isJudged(j) { return Boolean(j) && j.verdict !== "reset"; }
+function judgmentOf(pair) { return isJudged(state.judgments[pair.id]) ? state.judgments[pair.id] : null; }
 
 function useQueue(queue, demo) {
   state.queue = queue;
   state.demo = demo;
   state.judgments = store.get(judgmentsKey(), {});
+  const old = `approval:${queue.name}:judgments`; // ancien stockage, par file
+  const previous = store.get(old, null);
+  if (previous) {
+    mergeJudgments(state.judgments, Object.values(previous));
+    store.set(judgmentsKey(), state.judgments);
+    try { localStorage.removeItem(old); } catch { /* stockage indisponible */ }
+  }
   // On ouvre sur la première paire non jugée.
-  const first = queue.pairs.findIndex((p) => !state.judgments[p.id]);
+  const first = queue.pairs.findIndex((p) => !judgmentOf(p));
   state.index = Math.max(0, first);
   render();
 }
@@ -120,7 +197,7 @@ function boxesLabel(boxes) {
 // l'édition) : juste ou non jugée : la lecture du modèle ; corrigée : la correction ; écartée
 // (ou ancien « faux sans valeur ») : rien.
 function validated(pair) {
-  const j = state.judgments[pair.id];
+  const j = judgmentOf(pair);
   const corrected = j?.verdict === "wrong" && (boxesMode() ? j.boxes != null : j.correct != null);
   const discarded = j?.verdict === "discard" || (j?.verdict === "wrong" && !corrected);
   if (discarded) return { text: "—", boxes: [], note: "écartée", discarded: true };
@@ -132,7 +209,7 @@ function validated(pair) {
 // Valeur affichée : « vide » quand il n'y a rien à lire.
 function shownText(v) { return v.text === "" ? "vide" : v.text; }
 
-function pending() { return state.queue.pairs.filter((p) => !state.judgments[p.id]); }
+function pending() { return state.queue.pairs.filter((p) => !judgmentOf(p)); }
 
 function judge(pair, verdict, extra = {}) {
   // Juste : les boîtes proposées sont validées avec le texte.
@@ -146,7 +223,8 @@ function judge(pair, verdict, extra = {}) {
 
 // ↺ : la paire redevient « non jugée ».
 function clearJudgment(id) {
-  delete state.judgments[id];
+  // Gardé comme « reset » daté : à l'envoi, il annule aussi un jugement déjà dans le dépôt.
+  state.judgments[id] = { id, verdict: "reset", at: new Date().toISOString() };
   store.set(judgmentsKey(), state.judgments);
   updateProgress();
 }
@@ -154,7 +232,9 @@ function clearJudgment(id) {
 // Réglages : effacer les jugements « juste » (corrections et « ? » gardées), ou tous.
 function clearJudgments(onlyOk) {
   if (!state.queue) return toast("Aucune file chargée");
-  const ids = Object.values(state.judgments).filter((j) => !onlyOk || j.verdict === "ok").map((j) => j.id);
+  const queueIds = new Set(state.queue.pairs.map((p) => p.id));
+  const ids = Object.values(state.judgments)
+    .filter((j) => queueIds.has(j.id) && isJudged(j) && (!onlyOk || j.verdict === "ok")).map((j) => j.id);
   const question = onlyOk
     ? `Effacer les ${ids.length} « justes » de ${state.queue.name} ? Tes corrections et tes « ? » restent.`
     : `Effacer les ${ids.length} jugements de ${state.queue.name} ?`;
@@ -173,7 +253,7 @@ function updateProgress() {
   const done = total - pending().length;
   $("progress").textContent = `${done} / ${total}${state.demo ? " (exemple)" : ""}`;
   const counts = { ok: 0, wrong: 0, unknown: 0, discard: 0 }; // jugements de cette file
-  for (const j of Object.values(state.judgments)) counts[j.verdict]++;
+  for (const p of state.queue.pairs) if (judgmentOf(p)) counts[judgmentOf(p).verdict]++;
   $("doneText").textContent = `${state.queue.name} terminée : ${counts.ok} justes, `
     + `${counts.wrong} fausses, ${counts.unknown} sans avis, ${counts.discard} écartées.`;
   $("done").hidden = done < total || state.doneClosed;
@@ -440,7 +520,7 @@ function fillVerdicts(column, onPick) {
 
 // Un seul bouton allumé : celui du jugement actuel de la paire.
 function lightVerdicts(column, pair) {
-  const verdict = pair && state.judgments[pair.id]?.verdict;
+  const verdict = pair && judgmentOf(pair)?.verdict;
   for (const b of column.children) b.classList.toggle("on", b.dataset.verdict === verdict);
 }
 
@@ -509,7 +589,7 @@ function renderList() {
 // du jugement allumé.
 function fillRow(row) {
   const pair = row.pair;
-  const j = state.judgments[pair.id];
+  const j = judgmentOf(pair);
   const v = validated(pair);
   const boxes = v.boxes;
   row.className = `row ${j?.verdict || ""}${boxesMode() || v.text === "" ? " boxes" : ""}`;
@@ -950,6 +1030,11 @@ function wire() {
   $("menu").onclick = () => { refreshQueues(); $("settings").showModal(); };
   $("mode").onclick = () => setMode(state.mode === "split" ? "list" : "split");
   $("send").onclick = send;
+  $("sendNow").onclick = () => {
+    if (!state.queue) return toast("Aucune file chargée");
+    $("settings").close();
+    send();
+  };
   $("doneClose").onclick = () => { state.doneClosed = true; updateProgress(); };
   // La progression rouvre le panneau de fin (pour envoyer).
   $("progress").onclick = () => { state.doneClosed = false; updateProgress(); };
@@ -970,6 +1055,7 @@ function wire() {
       queue.name = name;
       $("settings").close();
       useQueue(queue, false);
+      pullJudgments();
     } catch (error) {
       $("status").textContent = error.message;
     }
