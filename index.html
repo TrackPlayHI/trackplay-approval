@@ -35,11 +35,8 @@
       </div>
     </section>
     <section id="panel">
-      <div id="hint">Pose le doigt pour voir le résultat</div>
       <div id="answer"></div>
-      <div id="arrows">
-        <span class="up">↑ juste</span><span class="left">← faux</span><span class="right">je ne sais pas →</span>
-      </div>
+      <div id="verdicts" class="verdicts"></div>
     </section>
     <section id="fix" hidden>
       <div id="value" aria-label="Valeur corrigée"></div>
@@ -53,10 +50,11 @@
     </section>
   </main>
 
-  <!-- Liste : une paire qui sort par le haut est juste ; poussée à gauche, fausse ; à droite, je ne sais pas. -->
+  <!-- Liste : chaque ligne a ses boutons de jugement (✓ juste, ✗ faux, ? je ne sais pas, ↺ non jugée). -->
   <main id="list" hidden></main>
 
   <div id="done" hidden>
+    <button id="doneClose" type="button" aria-label="Fermer">✕</button>
     <p id="doneText"></p>
     <button id="send">Envoyer les jugements</button>
   </div>
@@ -69,6 +67,10 @@
       <p class="small">Jeton « fine-grained » limité à ce dépôt, droit <b>Contents : read and write</b>. Il reste sur ce téléphone.</p>
       <label>File <select id="queue"></select></label>
       <p id="status" class="small"></p>
+      <div class="row">
+        <button id="clearOk" type="button">Effacer les justes</button>
+        <button id="clearAll" type="button">Tout effacer</button>
+      </div>
       <div class="row">
         <button id="demo" type="button">Essayer (exemple)</button>
         <button id="load" type="button">Charger</button>
