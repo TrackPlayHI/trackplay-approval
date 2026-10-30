@@ -370,12 +370,17 @@ function reveal() {
 
 // Image de l'écran partagé : la plus grande possible dans la place du haut, sans jamais la
 // déformer (une image presque carrée, mise à la largeur, était écrasée en hauteur).
+// Marge autour de l'image (px) : les ronds des coins d'une boîte au bord de l'image restent
+// entiers et faciles à saisir ; en haut, de quoi lire le caractère écrit au-dessus de la boîte.
+const EDGE = 12;
+const EDGE_TOP = 28;
+
 function fitImage() {
   const image = $("image");
   if (!image.naturalWidth || $("split").hidden) return;
-  const gaps = 36; // marges et espacements de la partie haute
+  const gaps = 36 + EDGE + EDGE_TOP; // marges et espacements de la partie haute
   const free = $("top").clientHeight - $("reason").offsetHeight - $("picks").offsetHeight - gaps;
-  const width = Math.min($("frame").clientWidth, 640);
+  const width = Math.min($("frame").clientWidth - 2 * EDGE, 640);
   const scale = Math.min(width / image.naturalWidth, Math.max(60, free) / image.naturalHeight);
   image.style.width = `${image.naturalWidth * scale}px`;
   image.style.height = `${image.naturalHeight * scale}px`;
@@ -394,8 +399,8 @@ const zoom = { s: 1, x: 0, y: 0 };
 
 function applyZoom() {
   const stage = $("stage");
-  const w = stage.clientWidth;
-  const h = stage.clientHeight;
+  const w = stage.clientWidth - 2 * EDGE; // taille de l'image, sans la marge
+  const h = stage.clientHeight - EDGE - EDGE_TOP;
   zoom.s = Math.min(ZOOM_MAX, Math.max(1, zoom.s));
   zoom.x = Math.min(0, Math.max(w - w * zoom.s, zoom.x));
   zoom.y = Math.min(0, Math.max(h - h * zoom.s, zoom.y));
@@ -420,8 +425,8 @@ function zoomGestures() {
   const center = () => {
     const list = [...pointers.values()];
     const r = stage.getBoundingClientRect();
-    const x = list.reduce((a, p) => a + p.x, 0) / list.length - r.left;
-    const y = list.reduce((a, p) => a + p.y, 0) / list.length - r.top;
+    const x = list.reduce((a, p) => a + p.x, 0) / list.length - r.left - EDGE;
+    const y = list.reduce((a, p) => a + p.y, 0) / list.length - r.top - EDGE_TOP;
     const d = list.length > 1 ? Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) : 0;
     return { x, y, d };
   };
