@@ -232,7 +232,12 @@ function show(pair) {
   }
   // Résultat affiché tout de suite, une fois l'image chargée (les boîtes suivent sa taille).
   const image = $("image");
-  image.onload = () => { if (state.current === pair && !state.fix) reveal(); };
+  image.onload = () => {
+    if (state.current !== pair) return;
+    fitImage();
+    if (state.fix) renderFix();
+    else reveal();
+  };
   image.src = pair.image;
   if (image.complete && image.naturalWidth) reveal();
   const confidence = pair.confidence != null && `confiance ${Math.round(pair.confidence * 100)} %`;
@@ -248,12 +253,28 @@ function reveal() {
   if (!pair) return;
   $("answer").textContent = boxesMode() ? boxesLabel(pair.boxes) : pair.text;
   $("answer").classList.toggle("label", boxesMode());
-  const image = $("image");
-  const overlay = $("overlay");
-  const scale = image.clientWidth / image.naturalWidth;
-  overlay.style.width = `${image.clientWidth}px`;
-  overlay.style.height = `${image.clientHeight}px`;
+  fitImage();
   drawBoxes(boxesOf(pair), boxesMode() ? "" : pair.text, false);
+}
+
+// Image de l'écran partagé : la plus grande possible dans la place du haut, sans jamais la
+// déformer (une image presque carrée, mise à la largeur, était écrasée en hauteur).
+function fitImage() {
+  const image = $("image");
+  if (!image.naturalWidth || $("split").hidden) return;
+  const gaps = 36; // marges et espacements de la partie haute
+  const free = $("top").clientHeight - $("reason").offsetHeight - $("picks").offsetHeight - gaps;
+  const width = Math.min($("frame").clientWidth, 640);
+  const scale = Math.min(width / image.naturalWidth, Math.max(60, free) / image.naturalHeight);
+  image.style.width = `${image.naturalWidth * scale}px`;
+  image.style.height = `${image.naturalHeight * scale}px`;
+}
+
+// Échelle de chaque axe, de l'image d'origine à l'écran : ce qui est vu est ce qui est enregistré,
+// même si l'image était déformée.
+function imageScale() {
+  const image = $("image");
+  return { sx: image.clientWidth / image.naturalWidth, sy: image.clientHeight / image.naturalHeight };
 }
 
 // Boîte de chaque caractère, [x0, y0, x1, y1] en pixels de l'image (coins haut-gauche et
@@ -276,7 +297,7 @@ function roundBoxes(boxes) {
 function drawBoxes(boxes, text, editable, marks = {}) {
   const image = $("image");
   const overlay = $("overlay");
-  const scale = image.clientWidth / image.naturalWidth;
+  const { sx, sy } = imageScale();
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
   overlay.classList.toggle("editable", editable);
@@ -284,10 +305,10 @@ function drawBoxes(boxes, text, editable, marks = {}) {
   boxes.forEach(([x0, y0, x1, y1], i) => {
     const box = document.createElement("div");
     box.className = "box" + (i === marks.selected ? " selected" : "") + (i === marks.current ? " current" : "");
-    box.style.left = `${x0 * scale}px`;
-    box.style.top = `${y0 * scale}px`;
-    box.style.width = `${(x1 - x0) * scale}px`;
-    box.style.height = `${(y1 - y0) * scale}px`;
+    box.style.left = `${x0 * sx}px`;
+    box.style.top = `${y0 * sy}px`;
+    box.style.width = `${(x1 - x0) * sx}px`;
+    box.style.height = `${(y1 - y0) * sy}px`;
     const c = text[i] ?? "";
     box.innerHTML = `<span class="${c === "?" ? "unknown" : ""}"></span>`
       + (editable ? '<i class="corner tl"></i><i class="corner br"></i>' : "");
@@ -434,6 +455,7 @@ function openFix(pair) {
   $("fixNone").textContent = boxesMode() ? "Inutilisable" : "Sans valeur";
   $("panel").hidden = true;
   $("fix").hidden = false;
+  fitImage(); // une seule fois : l'image ne change pas de taille pendant un glissé
   renderFix();
 }
 
@@ -595,25 +617,26 @@ function overlayGestures() {
   const imagePoint = (e) => {
     const image = $("image");
     const rect = image.getBoundingClientRect();
-    const scale = image.clientWidth / image.naturalWidth;
+    const { sx, sy } = imageScale();
     return {
-      x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / scale)),
-      y: Math.min(image.naturalHeight, Math.max(0, (e.clientY - rect.top) / scale)),
-      scale,
+      x: Math.min(image.naturalWidth, Math.max(0, (e.clientX - rect.left) / sx)),
+      y: Math.min(image.naturalHeight, Math.max(0, (e.clientY - rect.top) / sy)),
+      sx,
+      sy,
     };
   };
   overlay.addEventListener("pointerdown", (e) => {
     const fix = state.fix;
     if (!fix) return;
     e.stopPropagation(); // pas jusqu'au haut de l'écran, qui désélectionnerait la boîte
-    const { x, y, scale } = imagePoint(e);
+    const { x, y, sx, sy } = imagePoint(e);
     const boxes = fix.boxes;
     // Le coin le plus proche (haut-gauche ou bas-droite), sinon la boîte touchée.
     let grab = null;
     let best = GRAB;
     boxes.forEach((b, i) => {
       for (const [corner, cx, cy] of [["tl", b[0], b[1]], ["br", b[2], b[3]]]) {
-        const d = Math.hypot(cx - x, cy - y) * scale;
+        const d = Math.hypot((cx - x) * sx, (cy - y) * sy);
         if (d <= best) {
           best = d;
           grab = { index: i, corner };
@@ -829,6 +852,16 @@ function wire() {
     };
   }
 }
+
+// Écran tourné ou redimensionné : image et boîtes recalculées.
+window.addEventListener("resize", () => {
+  if (state.fix) {
+    fitImage();
+    renderFix();
+  } else if (state.current && !$("split").hidden) {
+    reveal();
+  }
+});
 
 wire();
 render();
