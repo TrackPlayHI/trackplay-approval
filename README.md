@@ -57,8 +57,9 @@ Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire d�
 
   L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
 - **Files « boîtes seules »** (`kind` : `boxes`, comme la file du ballon) : pas de valeur à lire, seulement des boîtes. Le résultat dit « aucun ballon », « 1 ballon »… ; ✓ valide les boîtes proposées (aucune : pas de ballon) ; ✗ ouvre l'édition des boîtes, sans pavé : un appui dans le vide ajoute une boîte carrée (taille habituelle de l'objet), on ajuste ou on efface comme pour les caractères (toutes effacées : aucun ballon), puis **Valider** ; ⊘ écarte la vignette (floue, coupée…). **Exemple ballon** dans les réglages en montre une.
-- À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là. Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
-- Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 10 ?, 5 ⊘)`, avec l'appareil, la date et le fichier dans le corps du message.
+- **Envoyer les jugements**, à tout moment (☰ Réglages) ou dans le panneau de fin de file : ils rejoignent le fichier de la **famille** de la file dans le dépôt des modèles (`judgments/score-text.json`, `judgments/ball.json`), partagé par toutes les versions (`score-text-v2`, `-v3`…). L'app relit ce fichier, fusionne (pour une même image, le jugement le plus récent l'emporte, ↺ compris : un jugement déjà envoyé puis remis à « non jugée » ne compte plus), le réécrit trié par identifiant, et recommence si un autre appareil l'a changé entre-temps. On peut donc envoyer souvent : rien n'est compté deux fois. Les jugements restent sur le téléphone, rangés par famille (ceux d'avant, rangés par file, y sont repris).
+- **À l'ouverture d'une file**, l'app reprend les jugements déjà dans le dépôt pour sa famille : une image jugée dans la v2 apparaît déjà jugée dans la v3 (même envoyée après la création de la v3). Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
+- Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text : 214 jugements (171 ✓, 14 ✗, 10 ?, 5 ⊘), file score-text-v2`, avec l'appareil, la date et le fichier dans le corps du message ; l'historique git garde chaque version du fichier.
 - ☰ Réglages, pour la file chargée (avec confirmation ; ce qui est déjà envoyé reste dans le dépôt) : **Effacer les justes** (garde les corrections et les « ? ») ou **Tout effacer**.
 
 ## Formats
@@ -97,7 +98,9 @@ Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 3. échantillon sans étiquette ;
 4. une part de cas sûrs tirés au hasard, pour mesurer la qualité réelle.
 
-**Jugements** : `judgments/<file>/<appareil>-<date>.json`, écrits par l'app :
+L'identifiant d'une paire désigne une **image** (fiche / champ / échantillon ; vidéo / image / ballon), pas une version : une file `score-text-v3` peut reproposer une image de la v2, avec le même identifiant. `family` (sinon le nom sans « -vN ») donne la famille de la file. Les nouvelles files évitent les images déjà jugées, sauf environ 5 % de contrôle (raison « contrôle »).
+
+**Jugements** : un fichier par famille, `judgments/<famille>.json`, trié par identifiant, écrit par l'app (les anciens fichiers par envoi, `judgments/<file>/<appareil>-<date>.json`, restent lus par les modèles) :
 
 ```json
 [
@@ -107,7 +110,7 @@ Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
 ]
 ```
 
-`verdict` vaut `ok` (juste), `wrong` (faux), `unknown` (je ne sais pas) ou `discard` (écartée).
+`verdict` vaut `ok` (juste), `wrong` (faux), `unknown` (je ne sais pas), `discard` (écartée) ou `reset` (remise à « non jugée » : le jugement précédent ne compte plus). `at` : heure du jugement, qui départage deux jugements d'une même image.
 - Une paire juste devient une étiquette pour l'entraînement suivant, avec ses boîtes.
 - Une paire fausse **corrigée** (`correct`, avec les `boxes`) donne l'étiquette juste et les boîtes justes ; `correct` vide et aucune boîte : rien à lire, une vraie étiquette.
 - Une paire **écartée** retire l'étiquette de cet échantillon (les anciens jugements « faux » sans `correct` comptent comme écartés).
