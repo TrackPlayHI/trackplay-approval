@@ -41,6 +41,7 @@ Rien n'est jugé sans bouton : ni en faisant défiler la liste, ni en changeant 
   - **Sans valeur** : faux, sans correction (illisible pour toi aussi). **↶** revient à la paire sans rien juger.
 
   L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
+- **Files « boîtes seules »** (`kind` : `boxes`, comme la file du ballon) : pas de valeur à lire, seulement des boîtes. Le résultat dit « aucun ballon », « 1 ballon »… ; ✓ valide les boîtes proposées (aucune : pas de ballon) ; ✗ ouvre la correction des boîtes, sans pavé : un appui dans le vide ajoute une boîte carrée (taille habituelle de l'objet), on ajuste ou on efface comme pour les caractères, puis **Valider** ; **Inutilisable** écarte la vignette (floue, coupée…). **Exemple ballon** dans les réglages en montre une.
 - **↶** (en haut) annule le dernier jugement.
 - À la fin de la file, **Envoyer les jugements** les écrit dans le dépôt des modèles. Les jugements sont gardés sur le téléphone jusque-là. Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
 - Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text-v2 : 200 jugements (171 ✓, 14 ✗, 15 ?)`, avec l'appareil, la date et le fichier dans le corps du message.
@@ -70,6 +71,8 @@ Rien n'est jugé sans bouton : ni en faisant défiler la liste, ni en changeant 
 ```
 
 `boxes` : boîte de chaque caractère, `[x0, y0, x1, y1]` en pixels de l'image (coins haut-gauche et bas-droite). Les anciennes files donnent à la place `positions` (abscisse de chaque caractère) ; l'app en fait des boîtes étroites sur toute la hauteur.
+
+File « boîtes seules » : en plus, `"kind": "boxes"`, `"object": "ballon"` et `"box_size"` (taille habituelle d'une boîte, en pixels) ; les paires n'ont pas de `text`, `boxes` peut être vide (rien à encadrer), `confidence` peut manquer (vignette sans proposition), `crop` (`[x0, y0, côté]` de la vignette dans l'image entière) et `where` sans `field`. Jugement : `boxes` validées ou corrigées (éventuellement vides), à `null` pour une vignette inutilisable ; pas de `correct`.
 
 `clip` : clip de contexte (MP4, H.264) dans `queues/` du dépôt des modèles, lu par l'API GitHub avec le jeton ; `where` : salle, champ et moment (secondes) dans la vidéo.
 

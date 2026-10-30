@@ -102,6 +102,16 @@ function useQueue(queue, demo) {
   render();
 }
 
+// File « boîtes seules » (`kind` : `boxes`, ballon…) : pas de valeur, seulement des boîtes.
+function boxesMode() { return state.queue?.kind === "boxes"; }
+
+// Ce que dit une paire en mode boîtes : « aucun ballon », « 1 ballon », « 2 ballons ».
+function boxesLabel(boxes) {
+  const object = state.queue.object || "objet";
+  const n = boxes?.length || 0;
+  return n === 0 ? `aucun ${object}` : `${n} ${object}${n > 1 ? "s" : ""}`;
+}
+
 function pending() { return state.queue.pairs.filter((p) => !state.judgments[p.id]); }
 
 function judge(pair, verdict, extra = {}) {
@@ -155,7 +165,7 @@ function updateProgress() {
   const total = state.queue.pairs.length;
   const done = total - pending().length;
   $("progress").textContent = `${done} / ${total}${state.demo ? " (exemple)" : ""}`;
-  const counts = { ok: 0, wrong: 0, unknown: 0 };
+  const counts = { ok: 0, wrong: 0, unknown: 0 }; // jugements de cette file
   for (const j of Object.values(state.judgments)) counts[j.verdict]++;
   $("doneText").textContent =
     `${state.queue.name} terminée : ${counts.ok} justes, ${counts.wrong} fausses, ${counts.unknown} sans avis.`;
@@ -177,7 +187,7 @@ function whereText(pair) {
   if (!w) return "";
   const s = Math.floor(w.time_s);
   const time = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-  return `${w.hall} · ${FIELDS[w.field] || w.field} · ${time}`;
+  return [w.hall, w.field && (FIELDS[w.field] || w.field), time].filter(Boolean).join(" · ");
 }
 
 // Clip de contexte (±3 s autour de l'image, champ encadré) : joué en boucle à la place de l'image,
@@ -225,7 +235,8 @@ function show(pair) {
   image.onload = () => { if (state.current === pair && !state.fix) reveal(); };
   image.src = pair.image;
   if (image.complete && image.naturalWidth) reveal();
-  $("reason").textContent = [pair.reason, `confiance ${Math.round(pair.confidence * 100)} %`, whereText(pair)]
+  const confidence = pair.confidence != null && `confiance ${Math.round(pair.confidence * 100)} %`;
+  $("reason").textContent = [pair.reason, confidence, whereText(pair)]
     .filter(Boolean).join(" · ");
   $("context").hidden = !pair.clip;
 }
@@ -235,13 +246,14 @@ function next() { show(pending()[0]); }
 function reveal() {
   const pair = state.current;
   if (!pair) return;
-  $("answer").textContent = pair.text;
+  $("answer").textContent = boxesMode() ? boxesLabel(pair.boxes) : pair.text;
+  $("answer").classList.toggle("label", boxesMode());
   const image = $("image");
   const overlay = $("overlay");
   const scale = image.clientWidth / image.naturalWidth;
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
-  drawBoxes(boxesOf(pair), pair.text, false);
+  drawBoxes(boxesOf(pair), boxesMode() ? "" : pair.text, false);
 }
 
 // Boîte de chaque caractère, [x0, y0, x1, y1] en pixels de l'image (coins haut-gauche et
@@ -268,7 +280,7 @@ function drawBoxes(boxes, text, editable, marks = {}) {
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
   overlay.classList.toggle("editable", editable);
-  overlay.innerHTML = editable ? "" : '<div class="middle"></div>';
+  overlay.innerHTML = editable || boxesMode() ? "" : '<div class="middle"></div>';
   boxes.forEach(([x0, y0, x1, y1], i) => {
     const box = document.createElement("div");
     box.className = "box" + (i === marks.selected ? " selected" : "") + (i === marks.current ? " current" : "");
@@ -348,12 +360,16 @@ function fillRow(row) {
   let text = pair.text;
   let boxes = pair.boxes;
   let note = "";
-  if (j?.verdict === "wrong" && j.correct != null) {
+  if (boxesMode()) {
+    if (j?.verdict === "wrong" && j.boxes) [boxes, note] = [j.boxes, "corrigé"];
+    else if (j?.verdict === "wrong") [boxes, note] = [[], "inutilisable"];
+    text = j?.verdict === "wrong" && !j.boxes ? "—" : boxesLabel(boxes);
+  } else if (j?.verdict === "wrong" && j.correct != null) {
     [text, boxes, note] = [j.correct, j.boxes, "corrigé"];
   } else if (j?.verdict === "wrong") {
     [text, boxes, note] = ["—", [], "sans valeur"];
   }
-  row.className = `row ${j?.verdict || ""}`;
+  row.className = `row ${j?.verdict || ""}${boxesMode() ? " boxes" : ""}`;
   row.querySelector(".value").textContent = text;
   row.querySelector(".note").textContent = note;
   lightVerdicts(row.querySelector(".verdicts"), pair);
@@ -408,10 +424,14 @@ const TAP_SLOP = 8; // px : en dessous, un appui qui bouge un peu reste un appui
 function openFix(pair) {
   closeContext();
   $("context").hidden = !pair.clip;
+  const text = boxesMode() ? "" : pair.text;
   state.fix = {
-    pair, value: pair.text, cursor: pair.text.length, boxes: boxesOf(pair),
-    selected: null, lastTap: null,
+    pair, value: text, cursor: text.length, boxes: boxesOf(pair), selected: null, lastTap: null,
   };
+  // Mode boîtes : ni valeur ni pavé ; « Sans valeur » devient « Inutilisable ».
+  $("value").hidden = boxesMode();
+  $("keypad").hidden = boxesMode();
+  $("fixNone").textContent = boxesMode() ? "Inutilisable" : "Sans valeur";
   $("panel").hidden = true;
   $("fix").hidden = false;
   renderFix();
@@ -446,7 +466,7 @@ function fixChanges() {
   const { pair, value, boxes } = state.fix;
   const before = boxesOf(pair);
   const wrong = [];
-  if (value !== pair.text) wrong.push("value");
+  if (!boxesMode() && value !== pair.text) wrong.push("value");
   const moved = (b, i) => b.some((v, k) => Math.abs(v - before[i][k]) > 0.5);
   if (boxes.length !== before.length || boxes.some(moved)) wrong.push("boxes");
   return wrong;
@@ -455,8 +475,16 @@ function fixChanges() {
 function renderFix() {
   const { value, boxes, cursor, selected } = state.fix;
   // Boîte du caractère juste avant le curseur : en évidence.
-  drawBoxes(boxes, value, true, { selected, current: cursor - 1 });
+  drawBoxes(boxes, value, true, { selected, current: boxesMode() ? null : cursor - 1 });
   $("trash").hidden = selected === null;
+  if (boxesMode()) {
+    const changed = fixChanges().length > 0;
+    $("fixOk").disabled = !changed;
+    $("fixHint").textContent = changed
+      ? `Corrigé : ${boxesLabel(boxes)}`
+      : `Corrige, ajoute (appui dans le vide) ou efface les boîtes ; aucune : pas de ${state.queue.object || "objet"}`;
+    return;
+  }
   const field = $("value");
   field.innerHTML = "";
   const caret = () => {
@@ -547,6 +575,13 @@ function newBox(x, y) {
   const h = image.naturalHeight;
   const others = state.fix.boxes;
   const median = (values) => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  if (boxesMode()) {
+    // Carré centré sur l'appui : taille médiane des autres boîtes, sinon celle de la file.
+    const size = others.length ? median(others.map((b) => b[2] - b[0])) : state.queue.box_size || h * 0.1;
+    const x0 = Math.min(image.naturalWidth - size, Math.max(0, x - size / 2));
+    const y0 = Math.min(h - size, Math.max(0, y - size / 2));
+    return [x0, y0, x0 + size, y0 + size];
+  }
   const width = others.length ? median(others.map((b) => b[2] - b[0])) : h * 0.5;
   const top = others.length ? median(others.map((b) => b[1])) : h * 0.1;
   const bottom = others.length ? median(others.map((b) => b[3])) : h * 0.9;
@@ -674,7 +709,8 @@ function fixWiring() {
   $("fixOk").onclick = () => {
     const { pair, value, boxes } = state.fix;
     const wrong = fixChanges();
-    judge(pair, "wrong", { correct: value, boxes: roundBoxes(boxes), wrong });
+    const correct = boxesMode() ? {} : { correct: value };
+    judge(pair, "wrong", { ...correct, boxes: roundBoxes(boxes), wrong });
     finishFix();
   };
   $("fixNone").onclick = () => {
@@ -703,6 +739,7 @@ function render() {
     return;
   }
   $("title").textContent = state.queue.name;
+  document.body.classList.toggle("boxes", boxesMode());
   $("split").hidden = state.mode !== "split";
   $("list").hidden = state.mode !== "list";
   $("mode").textContent = state.mode === "split" ? "≡" : "▣";
@@ -784,11 +821,13 @@ function wire() {
       $("status").textContent = error.message;
     }
   };
-  $("demo").onclick = async () => {
-    const queue = await (await fetch("sample/queue.json")).json();
-    $("settings").close();
-    useQueue(queue, true);
-  };
+  for (const [id, file] of [["demo", "queue.json"], ["demoBall", "ball-queue.json"]]) {
+    $(id).onclick = async () => {
+      const queue = await (await fetch(`sample/${file}`)).json();
+      $("settings").close();
+      useQueue(queue, true);
+    };
+  }
 }
 
 wire();
