@@ -28,6 +28,9 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
   gap: 12px; padding: 12px; min-height: 0; }
 #frame { position: relative; width: 100%; max-height: 100%; display: flex; justify-content: center; }
 #image { width: 100%; max-width: 640px; image-rendering: pixelated; border-radius: 4px; }
+/* Vignettes carrées (files « boîtes seules ») : pas plus de 38 % de la hauteur. */
+body.boxes #image, body.boxes #clip, body.boxes #overlay { max-width: min(100%, 38vh); }
+body.boxes #top { flex: 1.6; }
 #overlay { position: absolute; inset: 0; margin: 0 auto; max-width: 640px; pointer-events: none; }
 #overlay.editable { pointer-events: auto; touch-action: none; }
 /* Boîte de chaque caractère (coins haut-gauche et bas-droite), son caractère au-dessus. */
@@ -60,6 +63,7 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 #panel { flex: 1; background: var(--panel); position: relative; display: flex; align-items: center;
   padding: 12px; user-select: none; -webkit-user-select: none; }
 #answer { flex: 1; text-align: center; font-size: 64px; font-weight: 700; letter-spacing: 4px; }
+#answer.label, .row.boxes .value { font-size: 28px; letter-spacing: 0; }
 
 /* Boutons de jugement, en colonne à droite : un seul allumé, celui du jugement de la paire. */
 .verdicts { display: flex; flex-direction: column; gap: 10px; }
