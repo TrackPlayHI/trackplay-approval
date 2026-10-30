@@ -31,8 +31,8 @@ Partout, une paire montre **ce qui est validé** : la lecture du modèle, ou ta 
 
 | Où | Glissé | Effet |
 |---|---|---|
-| écran partagé | vers le bas | paire suivante (ordre de la file, paires jugées comprises) |
-| écran partagé | vers le haut | paire précédente |
+| écran partagé | vers le haut | paire suivante (ordre de la file, paires jugées comprises) |
+| écran partagé | vers le bas | paire précédente |
 | écran partagé | vers la gauche | la liste, placée sur cette paire |
 | liste | une carte vers la droite | l'écran partagé sur cette carte |
 
