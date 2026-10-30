@@ -34,7 +34,11 @@ body.boxes #clip { max-width: min(100%, 38vh); }
 body.boxes #top { flex: 1.6; }
 /* Zoom : #zoom grossit image et boîtes ensemble (transform) dans #stage, à la taille de l'image ;
    --z garde à l'écran l'épaisseur des traits, des coins et des caractères. */
-#stage { position: relative; overflow: hidden; touch-action: none; border-radius: 4px; }
+/* padding : marges EDGE et EDGE_TOP (app.js) où les coins et les caractères des boîtes au bord
+   restent visibles. */
+#stage { position: relative; overflow: hidden; touch-action: none; border-radius: 4px;
+  padding: 28px 12px 12px;
+  box-sizing: content-box; }
 #zoom { position: relative; transform-origin: 0 0; --z: 1; line-height: 0; }
 #lens { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 4px 10px; font-size: 15px;
   line-height: 1.2; background: #000a; border: 1px solid #fff6; border-radius: 14px; }
