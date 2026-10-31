@@ -293,7 +293,7 @@ function whereText(pair) {
 }
 
 // Clip de contexte (±3 s autour de l'image, champ encadré) : joué en boucle à la place de l'image,
-// un appui le referme.
+// zoomable comme elle ; un appui sans mouvement le referme.
 async function playContext(pair) {
   if (!pair?.clip) return;
   const clip = $("clip");
@@ -304,7 +304,8 @@ async function playContext(pair) {
     resetZoom();
     if (clip.src) URL.revokeObjectURL(clip.src);
     clip.src = URL.createObjectURL(blob);
-    clip.hidden = false;
+    $("clipStage").hidden = false;
+    clipZoom.reset();
     $("overlay").hidden = true;
     await clip.play();
   } catch (error) {
@@ -314,10 +315,11 @@ async function playContext(pair) {
 }
 
 function closeContext() {
-  const clip = $("clip");
-  if (clip.hidden) return;
-  clip.pause();
-  clip.hidden = true;
+  if ($("clipStage").hidden) return;
+  $("clip").pause();
+  $("clipStage").hidden = true;
+  clipZoom.reset();
+  resetZoom();
   $("overlay").hidden = false;
 }
 
@@ -389,60 +391,59 @@ function fitImage() {
   applyZoom();
 }
 
-// ---- Zoom de l'image (écran partagé) ----
-// Deux doigts : écarter ou rapprocher zoome (jusqu'à ×16) et déplace l'image ; image zoomée, un
-// doigt la déplace aussi (hors édition : en édition, un doigt sert aux boîtes). La pastille loupe
-// « ×N » remet l'image entière. Changer de paire, de mode ou lancer le contexte la remet aussi.
+// ---- Zoom (écran partagé) : image et clip de contexte ----
+// Deux doigts : écarter ou rapprocher zoome (jusqu'à ×16) et déplace le contenu ; zoomé, un doigt
+// le déplace aussi (sauf l'image en édition : un doigt sert alors aux boîtes). La pastille loupe
+// « ×N » remet le contenu entier. Changer de paire, de mode, ouvrir ou fermer le contexte remet
+// aussi l'image entière ; un nouveau clip part entier.
 
 const ZOOM_MAX = 16;
-const zoom = { s: 1, x: 0, y: 0 };
+const TAP_MOVE = 10; // un appui qui bouge moins (en pixels) n'est pas un déplacement
 
-function applyZoom() {
-  const stage = $("stage");
-  const w = stage.clientWidth - 2 * EDGE; // taille de l'image, sans la marge
-  const h = stage.clientHeight - EDGE - EDGE_TOP;
-  zoom.s = Math.min(ZOOM_MAX, Math.max(1, zoom.s));
-  zoom.x = Math.min(0, Math.max(w - w * zoom.s, zoom.x));
-  zoom.y = Math.min(0, Math.max(h - h * zoom.s, zoom.y));
-  const z = $("zoom");
-  z.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
-  z.style.setProperty("--z", zoom.s);
-  const lens = $("lens");
-  lens.hidden = zoom.s < 1.05;
-  const factor = zoom.s < 10 ? Math.round(zoom.s * 10) / 10 : Math.round(zoom.s);
-  lens.textContent = `🔍 ×${String(factor).replace(".", ",")}`;
-}
-
-function resetZoom() {
-  Object.assign(zoom, { s: 1, x: 0, y: 0 });
-  applyZoom();
-}
-
-function zoomGestures() {
-  const stage = $("stage");
+// `area()` : taille du contenu et sa marge dans le cadre ; `oneFinger()` : un doigt déplace le
+// contenu zoomé ; `onGesture(pinch)` : un geste de zoom commence ; `onTap` : appui sans mouvement.
+function makeZoom({ stage, content, lens, area, oneFinger, onGesture = () => {}, onTap }) {
+  const zoom = { s: 1, x: 0, y: 0 };
+  const apply = () => {
+    const { w, h } = area();
+    zoom.s = Math.min(ZOOM_MAX, Math.max(1, zoom.s));
+    zoom.x = Math.min(0, Math.max(w - w * zoom.s, zoom.x));
+    zoom.y = Math.min(0, Math.max(h - h * zoom.s, zoom.y));
+    content.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
+    content.style.setProperty("--z", zoom.s);
+    lens.hidden = zoom.s < 1.05;
+    const factor = zoom.s < 10 ? Math.round(zoom.s * 10) / 10 : Math.round(zoom.s);
+    lens.textContent = `🔍 ×${String(factor).replace(".", ",")}`;
+  };
+  const reset = () => {
+    Object.assign(zoom, { s: 1, x: 0, y: 0 });
+    apply();
+  };
   const pointers = new Map(); // pointerId -> { x, y }
-  let gesture = null; // départ du geste : zoom, point de l'image sous les doigts
+  let gesture = null; // départ du geste : zoom, point du contenu sous les doigts
+  let tap = null; // appui d'un doigt, tant qu'il ne bouge pas
   const center = () => {
     const list = [...pointers.values()];
     const r = stage.getBoundingClientRect();
-    const x = list.reduce((a, p) => a + p.x, 0) / list.length - r.left - EDGE;
-    const y = list.reduce((a, p) => a + p.y, 0) / list.length - r.top - EDGE_TOP;
+    const { left, top } = area();
+    const x = list.reduce((a, p) => a + p.x, 0) / list.length - r.left - left;
+    const y = list.reduce((a, p) => a + p.y, 0) / list.length - r.top - top;
     const d = list.length > 1 ? Math.hypot(list[0].x - list[1].x, list[0].y - list[1].y) : 0;
     return { x, y, d };
   };
   const begin = () => {
     const c = center();
-    // Point de l'image (non zoomée) sous les doigts : il y reste pendant le geste.
+    // Point du contenu (non zoomé) sous les doigts : il y reste pendant le geste.
     gesture = { s: zoom.s, d: c.d, px: (c.x - zoom.x) / zoom.s, py: (c.y - zoom.y) / zoom.s };
   };
   // Phase de capture : avant les boîtes de l'édition et les glissés de navigation.
   stage.addEventListener("pointerdown", (e) => {
-    if (e.target.id === "lens") return;
+    if (e.target === lens) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    const moving = pointers.size > 1 || (zoom.s > 1 && !state.fix);
+    tap = pointers.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
+    const moving = pointers.size > 1 || (zoom.s > 1 && oneFinger());
     if (!moving) return; // un doigt : boîtes en édition, navigation sinon
-    if (pointers.size > 1) state.cancelDrag?.(); // le premier doigt ne déplace plus de boîte
-    state.cancelSwipe?.();
+    onGesture(pointers.size > 1);
     stage.setPointerCapture(e.pointerId);
     e.stopPropagation();
     begin();
@@ -450,30 +451,67 @@ function zoomGestures() {
   stage.addEventListener("pointermove", (e) => {
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > TAP_MOVE) tap = null;
     if (!gesture) return;
     e.stopPropagation();
     const c = center();
     if (pointers.size > 1 && gesture.d > 0) zoom.s = gesture.s * (c.d / gesture.d);
     zoom.x = c.x - gesture.px * zoom.s;
     zoom.y = c.y - gesture.py * zoom.s;
-    applyZoom();
+    apply();
   }, true);
   const end = (e) => {
     if (!pointers.delete(e.pointerId)) return;
     if (gesture) e.stopPropagation();
+    if (e.type === "pointerup" && tap?.id === e.pointerId && !pointers.size) onTap?.();
     if (!pointers.size) {
       gesture = null;
+      tap = null;
     } else if (gesture) {
       begin(); // un doigt levé : on continue avec ceux qui restent
     }
   };
   stage.addEventListener("pointerup", end, true);
   stage.addEventListener("pointercancel", end, true);
-  $("lens").addEventListener("pointerdown", (e) => e.stopPropagation());
-  $("lens").onclick = (e) => {
+  lens.addEventListener("pointerdown", (e) => e.stopPropagation());
+  lens.onclick = (e) => {
     e.stopPropagation();
-    resetZoom();
+    reset();
   };
+  return { apply, reset };
+}
+
+let imageZoom = null;
+let clipZoom = null;
+function applyZoom() { imageZoom?.apply(); }
+function resetZoom() { imageZoom?.reset(); }
+
+function zoomGestures() {
+  imageZoom = makeZoom({
+    stage: $("stage"),
+    content: $("zoom"),
+    lens: $("lens"),
+    // L'image, sans la marge où restent visibles les coins et les caractères au bord.
+    area: () => ({
+      w: $("stage").clientWidth - 2 * EDGE, h: $("stage").clientHeight - EDGE - EDGE_TOP,
+      left: EDGE, top: EDGE_TOP,
+    }),
+    oneFinger: () => !state.fix,
+    onGesture: (pinch) => {
+      if (pinch) state.cancelDrag?.(); // le premier doigt ne déplace plus de boîte
+      state.cancelSwipe?.();
+    },
+  });
+  // Clip de contexte : un doigt le déplace dès qu'il est zoomé, un appui sans mouvement le ferme.
+  const stage = $("clipStage");
+  clipZoom = makeZoom({
+    stage,
+    content: $("clipZoom"),
+    lens: $("clipLens"),
+    area: () => ({ w: stage.clientWidth, h: stage.clientHeight, left: 0, top: 0 }),
+    oneFinger: () => true,
+    onTap: closeContext,
+  });
 }
 
 // Échelle de chaque axe, de l'image d'origine à l'écran : ce qui est vu est ce qui est enregistré,
@@ -566,7 +604,7 @@ function splitGestures() {
   const split = $("split");
   let start = null;
   split.addEventListener("pointerdown", (e) => {
-    if (state.fix || !state.current || !$("clip").hidden) return;
+    if (state.fix || !state.current || !$("clipStage").hidden) return;
     start = { x: e.clientX, y: e.clientY, id: e.pointerId };
   });
   // Un geste de zoom commence : ce n'était pas un glissé de navigation.
@@ -1066,7 +1104,6 @@ function wire() {
   $("clearOk").onclick = () => clearJudgments(true);
   $("clearAll").onclick = () => clearJudgments(false);
   $("context").onclick = () => playContext(state.fix?.pair || state.current);
-  $("clip").onclick = closeContext;
   // Appui long sur l'image ou les boîtes : pas de menu du navigateur (copier, télécharger…).
   for (const id of ["frame", "list"]) $(id).addEventListener("contextmenu", (e) => e.preventDefault());
   $("repo").onchange = () => { saveSettings(); refreshQueues(); };
