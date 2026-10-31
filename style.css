@@ -30,7 +30,7 @@ button { font: inherit; color: var(--text); background: #2a2a2a; border: 0; bord
 /* Taille posée par fitImage (proportions gardées). */
 #image { image-rendering: pixelated; border-radius: 4px; }
 /* Vignettes carrées (files « boîtes seules ») : le clip pas plus de 38 % de la hauteur. */
-body.boxes #clip { max-width: min(100%, 38vh); }
+body.boxes #clipStage { max-width: min(100%, 38vh); }
 body.boxes #top { flex: 1.6; }
 /* Zoom : #zoom grossit image et boîtes ensemble (transform) dans #stage, à la taille de l'image ;
    --z garde à l'écran l'épaisseur des traits, des coins et des caractères. */
@@ -40,7 +40,7 @@ body.boxes #top { flex: 1.6; }
   padding: 28px 12px 12px;
   box-sizing: content-box; }
 #zoom { position: relative; transform-origin: 0 0; --z: 1; line-height: 0; }
-#lens { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 4px 10px; font-size: 15px;
+.lens { position: absolute; top: 6px; right: 6px; z-index: 2; padding: 4px 10px; font-size: 15px;
   line-height: 1.2; background: #000a; border: 1px solid #fff6; border-radius: 14px; }
 #overlay { position: absolute; left: 0; top: 0; pointer-events: none; line-height: normal; }
 #overlay.editable { pointer-events: auto; touch-action: none; }
@@ -67,8 +67,10 @@ body.boxes #top { flex: 1.6; }
 #reason { color: var(--muted); font-size: 14px; text-align: center; }
 /* Appui long sur l'image : ni menu du navigateur, ni sélection, ni loupe. */
 #frame, #frame *, #list img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-#clip { position: absolute; inset: 0; margin: 0 auto; width: 100%; max-width: 640px; z-index: 3;
-  background: #000; border-radius: 4px; }
+#clipStage { position: absolute; inset: 0; margin: 0 auto; width: 100%; max-width: 640px; z-index: 3;
+  background: #000; border-radius: 4px; overflow: hidden; touch-action: none; }
+#clipZoom { width: 100%; height: 100%; transform-origin: 0 0; }
+#clip { display: block; width: 100%; height: 100%; object-fit: contain; }
 #picks { display: flex; gap: 12px; }
 
 #panel { flex: 1; background: var(--panel); position: relative; display: flex; align-items: center;

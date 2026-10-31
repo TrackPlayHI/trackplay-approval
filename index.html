@@ -27,9 +27,13 @@
             <img id="image" alt="Image à valider" draggable="false">
             <div id="overlay"></div>
           </div>
-          <button id="lens" type="button" aria-label="Image entière" hidden></button>
+          <button id="lens" class="lens" type="button" aria-label="Image entière" hidden></button>
         </div>
-        <video id="clip" muted loop playsinline hidden></video>
+        <!-- Clip de contexte : zoom comme l'image (deux doigts, loupe), un appui le referme. -->
+        <div id="clipStage" hidden>
+          <div id="clipZoom"><video id="clip" muted loop playsinline></video></div>
+          <button id="clipLens" class="lens" type="button" aria-label="Clip entier" hidden></button>
+        </div>
         <button id="trash" type="button" aria-label="Glisser un point ici pour l'effacer" hidden>🗑</button>
       </div>
       <div id="reason"></div>
