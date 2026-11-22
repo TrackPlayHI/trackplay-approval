@@ -186,6 +186,43 @@ function useQueue(queue, demo) {
 // File « boîtes seules » (`kind` : `boxes`, ballon…) : pas de valeur, seulement des boîtes.
 function boxesMode() { return state.queue?.kind === "boxes"; }
 
+// File « points » (`kind` : `points`, terrain : les 6 points du Jeu) : pas de valeur, des points
+// posés au doigt, numérotés par `Polygon.orderCourt` (polygon.js).
+function pointsMode() { return state.queue?.kind === "points"; }
+
+// Ni valeur ni pavé : boîtes seules ou points.
+function noText() { return boxesMode() || pointsMode(); }
+
+// Nombre de points attendus (`count` de la file, 6 par défaut : le terrain).
+function pointsCount() { return state.queue?.count ?? Polygon.COURT_POINTS; }
+
+// Ce que dit une paire en mode points : « aucun point », « 6 points ».
+function pointsLabel(points) {
+  const n = points?.length || 0;
+  return n === 0 ? "aucun point" : `${n} point${n > 1 ? "s" : ""}`;
+}
+
+// Points dans leur ordre : les 6 points du terrain numérotés (`Polygon.orderCourt`), sinon dans
+// l'ordre du tour. `numbered` : leur numéro a un sens (terrain, tous posés).
+function orderedPoints(points, pair) {
+  const numbered = pointsCount() === Polygon.COURT_POINTS && points.length === pointsCount();
+  const aspect = aspectOf(pair);
+  return { points: numbered ? Polygon.orderCourt(points, aspect) : Polygon.ring(points, aspect), numbered };
+}
+
+// Points enregistrés : dans leur ordre, 4 décimales.
+function savedPoints(points, pair) {
+  return orderedPoints(points, pair).points.map((p) => p.map((v) => Math.round(v * 10000) / 10000));
+}
+
+// Largeur sur hauteur de l'image d'une paire (angles et distances en pixels) : mesurée au
+// chargement de son image (écran partagé ou liste), sinon donnée par la file, sinon 16:9.
+function aspectOf(pair) { return pair?.aspect || state.queue?.aspect || 16 / 9; }
+
+function noteAspect(pair, image) {
+  if (pair && image.naturalWidth && image.naturalHeight) pair.aspect = image.naturalWidth / image.naturalHeight;
+}
+
 // Ce que dit une paire en mode boîtes : « aucun ballon », « 1 ballon », « 2 ballons ».
 function boxesLabel(boxes) {
   const object = state.queue.object || "objet";
@@ -200,18 +237,22 @@ function boxesLabel(boxes) {
 // (« jugé en v2 »), et si la lecture de cette file diffère (« v3 lit 4:18 »).
 function validated(pair) {
   const j = judgmentOf(pair);
-  const corrected = j?.verdict === "wrong" && (boxesMode() ? j.boxes != null : j.correct != null);
+  const corrected = j?.verdict === "wrong"
+    && (pointsMode() ? j.points != null : boxesMode() ? j.boxes != null : j.correct != null);
   const discarded = j?.verdict === "discard" || (j?.verdict === "wrong" && !corrected);
   const other = j?.queue && j.queue !== state.queue.name ? `jugé en ${versionOf(j.queue)}` : "";
   const notes = (...n) => n.filter(Boolean).join(" · ");
-  if (discarded) return { text: "—", boxes: [], note: notes("écartée", other), discarded: true, fromJ: false };
+  if (discarded) {
+    return { text: "—", boxes: [], points: [], note: notes("écartée", other), discarded: true, fromJ: false };
+  }
   const fromJ = Boolean(j) && (j.verdict === "ok" || corrected);
-  const text = !fromJ ? pair.text : corrected && !boxesMode() ? j.correct : (j.text ?? pair.text);
+  const text = !fromJ ? pair.text : corrected && !noText() ? j.correct : (j.text ?? pair.text);
   const boxes = fromJ && j.boxes ? j.boxes : pair.boxes;
-  const differs = fromJ && other && !boxesMode() && text !== pair.text
+  const points = (fromJ && j.points ? j.points : pair.points) || [];
+  const differs = fromJ && other && !noText() && text !== pair.text
     ? `${versionOf(state.queue.name)} lit ${pair.text || "vide"}` : "";
   return {
-    text: boxesMode() ? boxesLabel(boxes) : text, value: text, boxes, fromJ,
+    text: pointsMode() ? pointsLabel(points) : boxesMode() ? boxesLabel(boxes) : text, value: text, boxes, points, fromJ,
     note: notes(corrected && "corrigé", other, differs),
   };
 }
@@ -224,12 +265,13 @@ function shownText(v) { return v.text === "" ? "vide" : v.text; }
 
 function pending() { return state.queue.pairs.filter((p) => !judgmentOf(p)); }
 
-// Un jugement (J) porte sa valeur et sa file d'origine. Juste : la lecture et les boîtes de M sont
-// copiées dans J.
+// Un jugement (J) porte sa valeur et sa file d'origine. Juste : la lecture, les boîtes et les
+// points de M sont copiés dans J.
 function judge(pair, verdict, extra = {}) {
   const boxes = verdict === "ok" && pair.boxes ? { boxes: roundBoxes(pair.boxes) } : {};
+  const points = verdict === "ok" && pointsMode() ? { points: savedPoints(pair.points || [], pair) } : {};
   state.judgments[pair.id] = {
-    id: pair.id, text: pair.text, verdict, ...boxes, ...extra, queue: state.queue.name,
+    id: pair.id, text: pair.text, verdict, ...boxes, ...points, ...extra, queue: state.queue.name,
     at: new Date().toISOString(),
   };
   store.set(judgmentsKey(), state.judgments);
@@ -340,12 +382,16 @@ function show(pair) {
   const image = $("image");
   image.onload = () => {
     if (state.current !== pair) return;
+    noteAspect(pair, image);
     fitImage();
     if (state.fix) renderFix();
     else reveal();
   };
   image.src = pair.image;
-  if (image.complete && image.naturalWidth) reveal();
+  if (image.complete && image.naturalWidth) {
+    noteAspect(pair, image);
+    reveal();
+  }
   const confidence = pair.confidence != null && `confiance ${Math.round(pair.confidence * 100)} %`;
   $("reason").textContent = [pair.reason, confidence, whereText(pair)]
     .filter(Boolean).join(" · ");
@@ -364,10 +410,11 @@ function reveal() {
   if (!pair) return;
   const v = validated(pair);
   $("answer").textContent = shownText(v);
-  $("answer").classList.toggle("label", boxesMode() || v.text === "");
+  $("answer").classList.toggle("label", noText() || v.text === "");
   $("answerNote").textContent = v.note;
   fitImage();
-  drawBoxes(boxesOf({ boxes: v.boxes }), boxesMode() ? "" : v.text, false);
+  if (pointsMode()) drawPoints(v.points, false, pair);
+  else drawBoxes(boxesOf({ boxes: v.boxes }), boxesMode() ? "" : v.text, false);
 }
 
 // Image de l'écran partagé : la plus grande possible dans la place du haut, sans jamais la
@@ -402,16 +449,20 @@ const TAP_MOVE = 10; // un appui qui bouge moins (en pixels) n'est pas un dépla
 
 // `area()` : taille du contenu et sa marge dans le cadre ; `oneFinger()` : un doigt déplace le
 // contenu zoomé ; `onGesture(pinch)` : un geste de zoom commence ; `onTap` : appui sans mouvement.
-function makeZoom({ stage, content, lens, area, oneFinger, onGesture = () => {}, onTap }) {
+// `minZoom()` : zoom le plus petit (1 ; 0,5 pour les points, qui peuvent sortir de l'image).
+function makeZoom({ stage, content, lens, area, oneFinger, onGesture = () => {}, onTap, minZoom = () => 1 }) {
   const zoom = { s: 1, x: 0, y: 0 };
   const apply = () => {
     const { w, h } = area();
-    zoom.s = Math.min(ZOOM_MAX, Math.max(1, zoom.s));
-    zoom.x = Math.min(0, Math.max(w - w * zoom.s, zoom.x));
-    zoom.y = Math.min(0, Math.max(h - h * zoom.s, zoom.y));
+    zoom.s = Math.min(ZOOM_MAX, Math.max(minZoom(), zoom.s));
+    // Tout près de ×1 : ×1 exactement (loupe cachée, un doigt ne déplace plus le contenu).
+    if (Math.abs(zoom.s - 1) < 0.05) zoom.s = 1;
+    // Zoomé, le contenu couvre le cadre ; dézoomé, il reste entier dans le cadre.
+    zoom.x = Math.min(Math.max(0, w - w * zoom.s), Math.max(Math.min(0, w - w * zoom.s), zoom.x));
+    zoom.y = Math.min(Math.max(0, h - h * zoom.s), Math.max(Math.min(0, h - h * zoom.s), zoom.y));
     content.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.s})`;
     content.style.setProperty("--z", zoom.s);
-    lens.hidden = zoom.s < 1.05;
+    lens.hidden = Math.abs(zoom.s - 1) < 0.05;
     const factor = zoom.s < 10 ? Math.round(zoom.s * 10) / 10 : Math.round(zoom.s);
     lens.textContent = `🔍 ×${String(factor).replace(".", ",")}`;
   };
@@ -441,7 +492,7 @@ function makeZoom({ stage, content, lens, area, oneFinger, onGesture = () => {},
     if (e.target === lens) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     tap = pointers.size === 1 ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
-    const moving = pointers.size > 1 || (zoom.s > 1 && oneFinger());
+    const moving = pointers.size > 1 || (zoom.s !== 1 && oneFinger());
     if (!moving) return; // un doigt : boîtes en édition, navigation sinon
     onGesture(pointers.size > 1);
     stage.setPointerCapture(e.pointerId);
@@ -498,9 +549,15 @@ function zoomGestures() {
     }),
     oneFinger: () => !state.fix,
     onGesture: (pinch) => {
-      if (pinch) state.cancelDrag?.(); // le premier doigt ne déplace plus de boîte
+      if (pinch) {
+        // Le premier doigt ne déplace plus de boîte ni de point.
+        state.cancelDrag?.();
+        state.cancelPointDrag?.();
+      }
       state.cancelSwipe?.();
     },
+    // Points : dézoomer agrandit la marge grise, où se pose un point hors du cadre.
+    minZoom: () => (pointsMode() ? 0.5 : 1),
   });
   // Clip de contexte : un doigt le déplace dès qu'il est zoomé, un appui sans mouvement le ferme.
   const stage = $("clipStage");
@@ -542,6 +599,8 @@ function drawBoxes(boxes, text, editable, marks = {}) {
   const image = $("image");
   const overlay = $("overlay");
   const { sx, sy } = imageScale();
+  overlay.style.left = "";
+  overlay.style.top = "";
   overlay.style.width = `${image.clientWidth}px`;
   overlay.style.height = `${image.clientHeight}px`;
   overlay.classList.toggle("editable", editable);
@@ -558,6 +617,38 @@ function drawBoxes(boxes, text, editable, marks = {}) {
       + (editable ? '<i class="corner tl"></i><i class="corner br"></i>' : "");
     box.firstChild.textContent = c;
     overlay.appendChild(box);
+  });
+}
+
+// Marge autour de l'image où se pose un point hors du cadre (fraction de l'image, de chaque côté).
+const MARGIN = 0.5;
+
+// Points d'une file `points` (paire `pair`), normalisés, sur l'image : le contour dans l'ordre du
+// tour et, une fois les 6 points du terrain posés, leur numéro. L'overlay couvre aussi la marge
+// (points hors du cadre).
+function drawPoints(points, editable, pair) {
+  const image = $("image");
+  const overlay = $("overlay");
+  const w = image.clientWidth;
+  const h = image.clientHeight;
+  overlay.style.left = `${-w * MARGIN}px`;
+  overlay.style.top = `${-h * MARGIN}px`;
+  overlay.style.width = `${w * (1 + 2 * MARGIN)}px`;
+  overlay.style.height = `${h * (1 + 2 * MARGIN)}px`;
+  overlay.classList.toggle("editable", editable);
+  const { points: shown, numbered } = orderedPoints(points, pair);
+  const at = (p) => [(p[0] + MARGIN) * w, (p[1] + MARGIN) * h];
+  const line = shown.map((p) => at(p).map((v) => v.toFixed(1)).join(",")).join(" ");
+  const shape = shown.length >= 3 ? "polygon" : "polyline";
+  overlay.innerHTML = shown.length >= 2 ? `<svg><${shape} points="${line}"></${shape}></svg>` : "";
+  shown.forEach((p, i) => {
+    const [x, y] = at(p);
+    const dot = document.createElement("div");
+    dot.className = "point";
+    dot.style.left = `${x}px`;
+    dot.style.top = `${y}px`;
+    if (numbered) dot.innerHTML = `<span>${i + 1}</span>`;
+    overlay.appendChild(dot);
   });
 }
 
@@ -641,7 +732,10 @@ function renderList() {
     fillVerdicts(row.querySelector(".verdicts"), (verdict) => pickRow(row, verdict));
     rowGestures(row);
     const img = row.querySelector("img");
-    img.onload = () => fillRow(row);
+    img.onload = () => {
+      noteAspect(pair, img);
+      fillRow(row);
+    };
     img.src = pair.image;
     fillRow(row);
     list.appendChild(row);
@@ -656,13 +750,26 @@ function fillRow(row) {
   const j = judgmentOf(pair);
   const v = validated(pair);
   const boxes = v.boxes;
-  row.className = `row ${j?.verdict || ""}${boxesMode() || v.text === "" ? " boxes" : ""}`;
+  row.className = `row ${j?.verdict || ""}${noText() || v.text === "" ? " boxes" : ""}`;
   row.querySelector(".value").textContent = shownText(v);
   row.querySelector(".note").textContent = v.note;
   lightVerdicts(row.querySelector(".verdicts"), pair);
   const shot = row.querySelector(".shot");
-  shot.querySelectorAll(".box").forEach((b) => b.remove());
-  rowBoxes(shot, row.querySelector("img"), boxes);
+  shot.querySelectorAll(".box, .dot").forEach((b) => b.remove());
+  if (pointsMode()) rowPoints(shot, v.points);
+  else rowBoxes(shot, row.querySelector("img"), boxes);
+}
+
+// Points sur l'image d'une ligne (en pourcentage) ; ceux hors du cadre ne s'y voient pas.
+function rowPoints(shot, points) {
+  for (const [x, y] of points) {
+    if (x < 0 || x > 1 || y < 0 || y > 1) continue;
+    const dot = document.createElement("div");
+    dot.className = "dot";
+    dot.style.left = `${x * 100}%`;
+    dot.style.top = `${y * 100}%`;
+    shot.appendChild(dot);
+  }
 }
 
 // Boîtes des caractères sur l'image d'une ligne (en pourcentage : elles suivent la taille de l'image).
@@ -728,15 +835,15 @@ function openFix(pair) {
   closeContext();
   $("context").hidden = !pair.clip;
   const v = validated(pair);
-  const start = v.fromJ && !v.discarded ? v : { value: pair.text, boxes: pair.boxes };
-  const text = boxesMode() ? "" : start.value;
+  const start = v.fromJ && !v.discarded ? v : { value: pair.text, boxes: pair.boxes, points: pair.points };
+  const text = noText() ? "" : start.value;
   state.fix = {
     pair, value: text, cursor: text.length, boxes: boxesOf({ boxes: start.boxes }), selected: null,
-    lastTap: null,
+    points: (start.points || []).map((p) => [...p]), lastTap: null,
   };
-  // Mode boîtes : ni valeur ni pavé.
-  $("value").hidden = boxesMode();
-  $("keypad").hidden = boxesMode();
+  // Modes boîtes et points : ni valeur ni pavé.
+  $("value").hidden = noText();
+  $("keypad").hidden = noText();
   $("panel").hidden = true;
   $("fix").hidden = false;
   fitImage(); // une seule fois : l'image ne change pas de taille pendant un glissé
@@ -761,7 +868,14 @@ function finishFix() {
 }
 
 function fixChanges() {
-  const { pair, value, boxes } = state.fix;
+  const { pair, value, boxes, points } = state.fix;
+  if (pointsMode()) {
+    const before = savedPoints(pair.points || [], pair);
+    const after = savedPoints(points, pair);
+    const same = after.length === before.length
+      && after.every((p, i) => Math.abs(p[0] - before[i][0]) < 0.0005 && Math.abs(p[1] - before[i][1]) < 0.0005);
+    return same ? [] : ["points"];
+  }
   const before = boxesOf(pair);
   const wrong = [];
   if (!boxesMode() && value !== pair.text) wrong.push("value");
@@ -771,6 +885,7 @@ function fixChanges() {
 }
 
 function renderFix() {
+  if (pointsMode()) return renderPointsFix();
   const { value, boxes, cursor, selected } = state.fix;
   // Boîte du caractère juste avant le curseur : en évidence.
   drawBoxes(boxes, value, true, { selected, current: boxesMode() ? null : cursor - 1 });
@@ -808,6 +923,24 @@ function renderFix() {
     : wrong.length === 0
       ? "Identique à la lecture du modèle : c'est ✓. Rien à lire : « vide » et aucune boîte"
       : `Corrigé : ${wrong.map((w) => (w === "value" ? "valeur" : "boîtes")).join(" et ")}`;
+}
+
+// Édition des points : Valider quand ils sont tous posés et différents de la proposition.
+function renderPointsFix() {
+  const { points, pair } = state.fix;
+  drawPoints(points, true, pair);
+  $("trash").hidden = true;
+  const n = points.length;
+  const count = pointsCount();
+  const changed = fixChanges().length > 0;
+  $("fixOk").disabled = n !== count || !changed;
+  $("fixHint").textContent = n < count
+    ? `${n} / ${count} points. Touchez les 4 coins et les 2 bouts de la ligne médiane, dans n'importe quel ordre ; `
+      + "double appui sur un bord : point posé sur la ligne. Point caché ou hors du cadre : là où il serait, "
+      + "dans la marge grise (dézoomez à deux doigts)."
+    : !changed
+      ? "Identique à la proposition : c'est ✓"
+      : "Points numérotés. Glissez un point pour le corriger, double appui pour le retirer.";
 }
 
 function key(k) {
@@ -912,7 +1045,7 @@ function overlayGestures() {
   };
   overlay.addEventListener("pointerdown", (e) => {
     const fix = state.fix;
-    if (!fix) return;
+    if (!fix || pointsMode()) return;
     e.stopPropagation(); // pas jusqu'au haut de l'écran, qui désélectionnerait la boîte
     const { x, y, sx, sy } = imagePoint(e);
     const boxes = fix.boxes;
@@ -1002,8 +1135,103 @@ function overlayGestures() {
   });
 }
 
+// Points (file `points`), comme la zone Jeu en édition dans GameAI : un appui dans le vide pose un
+// point (tant qu'il en manque), un point se glisse (aussi dans la marge), un double appui sur un
+// point le retire, un double appui sur un bord y pose le point exactement sur la ligne (le premier
+// appui l'a posé, le second le ramène au pied de la perpendiculaire). Deux doigts zooment.
+function pointsGestures() {
+  const overlay = $("overlay");
+  let drag = null;
+  // Point du doigt, normalisé (limité à la marge), et taille de l'image à l'écran (zoom compris).
+  const at = (e) => {
+    const r = $("image").getBoundingClientRect();
+    const clamp = (v) => Math.min(1 + MARGIN, Math.max(-MARGIN, v));
+    return { p: [clamp((e.clientX - r.left) / r.width), clamp((e.clientY - r.top) / r.height)], w: r.width, h: r.height };
+  };
+  const nearest = (points, p, w, h) => {
+    let best = null;
+    let distance = GRAB;
+    points.forEach((q, i) => {
+      const d = Math.hypot((q[0] - p[0]) * w, (q[1] - p[1]) * h);
+      if (d <= distance) {
+        distance = d;
+        best = i;
+      }
+    });
+    return best;
+  };
+  // Deux doigts posés : le geste devient un zoom, le point reprend sa place d'avant.
+  state.cancelPointDrag = () => {
+    if (!drag || !state.fix) return;
+    if (drag.start) state.fix.points[drag.index] = drag.start;
+    drag = null;
+    renderFix();
+  };
+  overlay.addEventListener("pointerdown", (e) => {
+    const fix = state.fix;
+    if (!fix || !pointsMode()) return;
+    e.stopPropagation();
+    const { p, w, h } = at(e);
+    const index = nearest(fix.points, p, w, h);
+    drag = { index, start: index === null ? null : [...fix.points[index]], x: e.clientX, y: e.clientY, moved: false };
+    overlay.setPointerCapture(e.pointerId);
+  });
+  overlay.addEventListener("pointermove", (e) => {
+    const fix = state.fix;
+    if (!drag || !fix || !pointsMode()) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < TAP_SLOP) return;
+    drag.moved = true;
+    if (drag.index === null) return; // un doigt glissé dans le vide ne fait rien
+    fix.points[drag.index] = at(e).p;
+    fix.lastTap = null;
+    renderFix();
+  });
+  const release = (e) => {
+    const fix = state.fix;
+    if (!drag || !fix || !pointsMode()) return;
+    const { index, moved, start } = drag;
+    drag = null;
+    if (e.type !== "pointerup") {
+      // Geste interrompu (geste du système) : le point glissé revient à sa place.
+      if (moved && start) {
+        fix.points[index] = start;
+        renderFix();
+      }
+      return;
+    }
+    if (moved) return;
+    const { p, w, h } = at(e);
+    const now = Date.now();
+    const last = fix.lastTap;
+    const double = last && now - last.at < DOUBLE_TAP && Math.hypot((p[0] - last.p[0]) * w, (p[1] - last.p[1]) * h) < GRAB;
+    if (double) {
+      fix.lastTap = null;
+      if (last.added !== null) {
+        // Double appui sur un bord : le point posé au premier appui va sur la ligne.
+        const others = fix.points.filter((_, k) => k !== last.added);
+        const foot = Polygon.footOnSide(Polygon.ring(others, aspectOf(fix.pair)), last.p, GRAB, w, h);
+        if (foot) fix.points[last.added] = foot.point;
+      } else if (index !== null) {
+        fix.points.splice(index, 1); // double appui sur un point : retiré
+      }
+      renderFix();
+      return;
+    }
+    let added = null;
+    if (index === null && fix.points.length < pointsCount()) {
+      fix.points.push(p);
+      added = fix.points.length - 1;
+    }
+    fix.lastTap = { at: now, p, added };
+    renderFix();
+  };
+  overlay.addEventListener("pointerup", release);
+  overlay.addEventListener("pointercancel", release);
+}
+
 function fixWiring() {
   overlayGestures();
+  pointsGestures();
   valueGestures();
   // Pavé de calculatrice (7 8 9 en haut), séparateurs à droite.
   for (const k of ["7", "8", "9", "-", "4", "5", "6", ":", "1", "2", "3", ".", "?", "0", "⌫", "vide"]) {
@@ -1017,6 +1245,10 @@ function fixWiring() {
   $("fixOk").onclick = () => {
     const { pair, value, boxes } = state.fix;
     const wrong = fixChanges();
+    if (pointsMode()) {
+      judge(pair, "wrong", { points: savedPoints(state.fix.points, pair), wrong });
+      return finishFix();
+    }
     const correct = boxesMode() ? {} : { correct: value };
     judge(pair, "wrong", { ...correct, boxes: roundBoxes(boxes), wrong });
     finishFix();
@@ -1035,6 +1267,7 @@ function render() {
   }
   $("title").textContent = state.queue.name;
   document.body.classList.toggle("boxes", boxesMode());
+  document.body.classList.toggle("points", pointsMode());
   $("split").hidden = state.mode !== "split";
   $("list").hidden = state.mode !== "list";
   $("mode").textContent = state.mode === "split" ? "≡" : "▣";
@@ -1122,7 +1355,7 @@ function wire() {
       $("status").textContent = error.message;
     }
   };
-  for (const [id, file] of [["demo", "queue.json"], ["demoBall", "ball-queue.json"]]) {
+  for (const [id, file] of [["demo", "queue.json"], ["demoBall", "ball-queue.json"], ["demoCourt", "court-queue.json"]]) {
     $(id).onclick = async () => {
       const queue = await (await fetch(`sample/${file}`)).json();
       $("settings").close();

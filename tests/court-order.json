@@ -1,0 +1,42 @@
+{
+ "description": "Cas de parité de CourtOrder (GameAI :core) : 6 points du Jeu donnés dans le désordre, normalisés (image 16:9), et leur numérotation attendue (docs/zones-auto.md §4.4). Lus par CourtOrderTest (Kotlin), par trackplay-approval (JavaScript) et par trackplay-models (Python).",
+ "aspect": 1.7777777777777777,
+ "cases": [
+  {
+   "name": "salle réelle",
+   "description": "les 6 points par défaut (AreaProposals.DEFAULT_COURT), caméra sur le côté",
+   "points": [[0.0454, 0.574], [0.2998, 0.4426], [0.4439, 0.6402], [0.4994, 0.4464], [0.7232, 0.4613], [0.9749, 0.644]],
+   "expected": [[0.2998, 0.4426], [0.4994, 0.4464], [0.7232, 0.4613], [0.9749, 0.644], [0.4439, 0.6402], [0.0454, 0.574]]
+  },
+  {
+   "name": "côté",
+   "description": "terrain 28 x 15 m vu du milieu du côté, à 6 m de haut",
+   "points": [[0.5, 0.4474], [0.0953, 0.6014], [0.7097, 0.4474], [0.5, 0.6014], [0.2903, 0.4474], [0.9047, 0.6014]],
+   "expected": [[0.2903, 0.4474], [0.5, 0.4474], [0.7097, 0.4474], [0.9047, 0.6014], [0.5, 0.6014], [0.0953, 0.6014]]
+  },
+  {
+   "name": "côté, coins hors du cadre",
+   "description": "caméra proche : les 2 coins du bas sortent de l'image",
+   "points": [[0.2252, 0.4172], [0.7748, 0.4172], [1.2244, 0.7182], [-0.2244, 0.7182], [0.5, 0.4172], [0.5, 0.7182]],
+   "expected": [[0.2252, 0.4172], [0.5, 0.4172], [0.7748, 0.4172], [1.2244, 0.7182], [0.5, 0.7182], [-0.2244, 0.7182]]
+  },
+  {
+   "name": "fond",
+   "description": "caméra derrière une ligne de fond : médiane horizontale",
+   "points": [[0.3384, 0.5], [0.6616, 0.5], [0.4016, 0.4061], [0.9517, 0.9308], [0.5984, 0.4061], [0.0483, 0.9308]],
+   "expected": [[0.0483, 0.9308], [0.3384, 0.5], [0.4016, 0.4061], [0.5984, 0.4061], [0.6616, 0.5], [0.9517, 0.9308]]
+  },
+  {
+   "name": "coin",
+   "description": "caméra en coin, un coin sous l'image : médiane horizontale",
+   "points": [[0.2819, 0.43], [0.9416, 0.6417], [0.5911, 1.14], [0.3388, 0.5606], [0.6121, 0.4579], [0.4838, 0.3863]],
+   "expected": [[0.5911, 1.14], [0.3388, 0.5606], [0.2819, 0.43], [0.4838, 0.3863], [0.6121, 0.4579], [0.9416, 0.6417]]
+  },
+  {
+   "name": "coin lointain",
+   "description": "caméra loin dans l'axe d'un coin : une diagonale est plus courte que la médiane",
+   "points": [[0.54, 0.4576], [0.3846, 0.6223], [0.3902, 0.4644], [0.5999, 0.4934], [0.7428, 0.5787], [0.3887, 0.5074]],
+   "expected": [[0.3846, 0.6223], [0.3887, 0.5074], [0.3902, 0.4644], [0.54, 0.4576], [0.5999, 0.4934], [0.7428, 0.5787]]
+  }
+ ]
+}

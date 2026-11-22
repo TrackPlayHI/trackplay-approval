@@ -66,6 +66,14 @@ Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire d�
 
   L'app déduit ce qui était faux de ce qui a changé : la valeur, les boîtes, ou les deux. Une paire jugée **juste** valide aussi ses boîtes.
 - **Files « boîtes seules »** (`kind` : `boxes`, comme la file du ballon) : pas de valeur à lire, seulement des boîtes. Le résultat dit « aucun ballon », « 1 ballon »… ; ✓ valide les boîtes proposées (aucune : pas de ballon) ; ✗ ouvre l'édition des boîtes, sans pavé : un appui dans le vide ajoute une boîte carrée (taille habituelle de l'objet), on ajuste ou on efface comme pour les caractères (toutes effacées : aucun ballon), puis **Valider** ; ⊘ écarte la vignette (floue, coupée…). **Exemple ballon** dans les réglages en montre une.
+- **Files « points »** (`kind` : `points`, comme la file du terrain `court-vN`) : des points à poser sur l'image, ici les **6 points du Jeu** (4 coins et les 2 bouts de la ligne médiane). Le résultat dit « aucun point » (le modèle n'a rien trouvé) ou « 6 points » ; ✓ valide les points proposés ; ✗ ouvre l'édition, sans pavé, avec les gestes de la zone Jeu en édition dans GameAI :
+  - **un appui dans le vide** pose un point, tant qu'il en manque ; les points se posent **dans n'importe quel ordre** ;
+  - **glisser un point** le déplace ;
+  - **double appui sur un point** le retire ;
+  - **double appui sur un bord** (le contour relie les points dans l'ordre du tour) : le point est posé exactement sur la ligne (pratique pour un bout de médiane : poser les 4 coins, puis un double appui sur chaque bord long) ;
+  - un point **caché ou hors du cadre** se pose là où il serait : deux doigts rapprochés dézooment jusqu'à ×0,5 et agrandissent la **marge grise** autour de l'image, où le point se pose et se glisse (jusqu'à une demi-image de chaque côté) ;
+  - dès le 6e point, l'app les **numérote** d'elle-même (règle de GameAI, `docs/zones-auto.md` §4.4) : la ligne médiane est la paire de points opposés la mieux alignée avec ses voisins ; médiane verticale (caméra sur le côté) : 1 coin haut gauche, 2 bout du haut, 3 coin haut droit, 4 coin bas droit, 5 bout du bas, 6 coin bas gauche ; médiane horizontale (caméra derrière une ligne de fond) : 1 coin bas gauche, 2 bout gauche, 3 coin haut gauche, 4 coin haut droit, 5 bout droit, 6 coin bas droit ;
+  - **Valider** n'est possible qu'avec les 6 points posés, différents de la proposition ; ⊘ écarte une image inutilisable. **Exemple terrain** dans les réglages en montre deux (terrains dessinés).
 - **Envoyer les jugements**, à tout moment (☰ Réglages) ou dans le panneau de fin de file : ils rejoignent le fichier de la **famille** de la file dans le dépôt des modèles (`judgments/score-text.json`, `judgments/ball.json`), partagé par toutes les versions (`score-text-v2`, `-v3`…). L'app relit ce fichier, fusionne (pour une même image, le jugement le plus récent l'emporte, ↺ compris : un jugement déjà envoyé puis remis à « non jugée » ne compte plus), le réécrit trié par identifiant, et recommence si un autre appareil l'a changé entre-temps. On peut donc envoyer souvent : rien n'est compté deux fois. Les jugements restent sur le téléphone, rangés par famille (ceux d'avant, rangés par file, y sont repris).
 - **À l'ouverture d'une file**, l'app reprend les jugements déjà dans le dépôt pour sa famille : une image jugée dans la v2 apparaît déjà jugée dans la v3 (même envoyée après la création de la v3). Le panneau de fin se ferme (✕) ; toucher la progression (« 200 / 200 ») le rouvre.
 - Chaque envoi est un commit facile à retrouver (chercher « Approval · » dans les commits du dépôt des modèles) : `Approval · score-text : 214 jugements (171 ✓, 14 ✗, 10 ?, 5 ⊘), file score-text-v2`, avec l'appareil, la date et le fichier dans le corps du message ; l'historique git garde chaque version du fichier.
@@ -98,6 +106,8 @@ Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire d�
 
 File « boîtes seules » : en plus, `"kind": "boxes"`, `"object": "ballon"` et `"box_size"` (taille habituelle d'une boîte, en pixels) ; les paires n'ont pas de `text`, `boxes` peut être vide (rien à encadrer), `confidence` peut manquer (vignette sans proposition), `crop` (`[x0, y0, côté]` de la vignette dans l'image entière) et `where` sans `field`. Jugement : `boxes` validées ou corrigées (éventuellement vides), à `null` pour une vignette inutilisable ; pas de `correct`.
 
+File « points » : en plus, `"kind": "points"`, `"count": 6` (nombre de points à poser) et `"aspect"` (largeur sur hauteur des images, 16:9 par défaut ; l'app mesure celle de chaque image chargée, pour numéroter en pixels) ; chaque paire a `points`, les points proposés `[[x, y], …]`, **normalisés** (0 à 1 dans l'image, de −0,5 à 1,5 dans la marge pour un point hors du cadre), vide si le modèle n'a rien trouvé ; pas de `text`. Jugement : `points` validés ou corrigés, numérotés (6 points du terrain, 4 décimales), `"wrong": ["points"]` pour une correction.
+
 `clip` : clip de contexte (MP4, H.264) dans `queues/` du dépôt des modèles, lu par l'API GitHub avec le jeton ; `where` : salle, champ et moment (secondes) dans la vidéo.
 
 Les paires arrivent par ordre de priorité, avec leur raison (`reason`) :
@@ -128,4 +138,5 @@ L'identifiant d'une paire désigne une **image** (fiche / champ / échantillon ;
 
 Pas de compilation : HTML, CSS et JavaScript simples.
 - Tester en local : `python -m http.server`, puis <http://localhost:8000>.
+- Tests des règles sans écran (`polygon.js` : numérotation des 6 points, contour, point posé sur un bord) : `node --test`, lancés aussi par `.github/workflows/tests.yml`. `tests/court-order.json` est une copie de `testdata/court-order.json` de GameAI (cas de parité de `geometry/CourtOrder`) : à recopier si GameAI les change.
 - Publication : `.github/workflows/pages.yml` publie à chaque push sur `main`. Il faut avoir réglé une fois Settings → Pages → Source : **GitHub Actions**.

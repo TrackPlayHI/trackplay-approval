@@ -1,6 +1,6 @@
 // Garde l'app sur le téléphone pour l'ouvrir hors ligne ; l'API GitHub n'est jamais mise en cache.
-const CACHE = "approval-v18";
-const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icon.svg", "sample/queue.json", "sample/ball-queue.json"];
+const CACHE = "approval-v19";
+const SHELL = ["./", "index.html", "style.css", "app.js", "polygon.js", "manifest.webmanifest", "icon.svg", "sample/queue.json", "sample/ball-queue.json", "sample/court-queue.json"];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL))));
 self.addEventListener("activate", (e) => e.waitUntil(
