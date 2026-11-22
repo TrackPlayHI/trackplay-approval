@@ -1,5 +1,5 @@
 // Points d'une file `points` (terrain : 6 points du Jeu), sans rien de l'écran : utilisable dans
-// l'app et testé avec Node (`node --test tests/`). Règles reprises de GameAI :
+// l'app et testé avec Node (`node --test`). Règles reprises de GameAI :
 // - `orderCourt` : `geometry/CourtOrder` de `:core` (docs/zones-auto.md §4.4), en parité, cas de
 //   `testdata/court-order.json` copiés dans `tests/court-order.json` ;
 // - `ring` et `footOnSide` : édition de la zone Jeu (`OverlayView.editPoint`,

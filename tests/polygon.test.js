@@ -1,4 +1,4 @@
-// Règles de polygon.js : node --test tests/
+// Règles de polygon.js : node --test
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert");

@@ -202,16 +202,25 @@ function pointsLabel(points) {
   return n === 0 ? "aucun point" : `${n} point${n > 1 ? "s" : ""}`;
 }
 
-// Points enregistrés : numérotés (6 points du terrain), 4 décimales.
-function savedPoints(points) {
-  const ordered = points.length === pointsCount() ? Polygon.orderCourt(points, imageAspect()) : points;
-  return ordered.map((p) => p.map((v) => Math.round(v * 10000) / 10000));
+// Points dans leur ordre : les 6 points du terrain numérotés (`Polygon.orderCourt`), sinon dans
+// l'ordre du tour. `numbered` : leur numéro a un sens (terrain, tous posés).
+function orderedPoints(points, pair) {
+  const numbered = pointsCount() === Polygon.COURT_POINTS && points.length === pointsCount();
+  const aspect = aspectOf(pair);
+  return { points: numbered ? Polygon.orderCourt(points, aspect) : Polygon.ring(points, aspect), numbered };
 }
 
-// Largeur sur hauteur de l'image (angles et distances en pixels).
-function imageAspect() {
-  const image = $("image");
-  return image.naturalWidth && image.naturalHeight ? image.naturalWidth / image.naturalHeight : 16 / 9;
+// Points enregistrés : dans leur ordre, 4 décimales.
+function savedPoints(points, pair) {
+  return orderedPoints(points, pair).points.map((p) => p.map((v) => Math.round(v * 10000) / 10000));
+}
+
+// Largeur sur hauteur de l'image d'une paire (angles et distances en pixels) : mesurée au
+// chargement de son image (écran partagé ou liste), sinon donnée par la file, sinon 16:9.
+function aspectOf(pair) { return pair?.aspect || state.queue?.aspect || 16 / 9; }
+
+function noteAspect(pair, image) {
+  if (pair && image.naturalWidth && image.naturalHeight) pair.aspect = image.naturalWidth / image.naturalHeight;
 }
 
 // Ce que dit une paire en mode boîtes : « aucun ballon », « 1 ballon », « 2 ballons ».
@@ -260,7 +269,7 @@ function pending() { return state.queue.pairs.filter((p) => !judgmentOf(p)); }
 // points de M sont copiés dans J.
 function judge(pair, verdict, extra = {}) {
   const boxes = verdict === "ok" && pair.boxes ? { boxes: roundBoxes(pair.boxes) } : {};
-  const points = verdict === "ok" && pointsMode() ? { points: savedPoints(pair.points || []) } : {};
+  const points = verdict === "ok" && pointsMode() ? { points: savedPoints(pair.points || [], pair) } : {};
   state.judgments[pair.id] = {
     id: pair.id, text: pair.text, verdict, ...boxes, ...points, ...extra, queue: state.queue.name,
     at: new Date().toISOString(),
@@ -373,12 +382,16 @@ function show(pair) {
   const image = $("image");
   image.onload = () => {
     if (state.current !== pair) return;
+    noteAspect(pair, image);
     fitImage();
     if (state.fix) renderFix();
     else reveal();
   };
   image.src = pair.image;
-  if (image.complete && image.naturalWidth) reveal();
+  if (image.complete && image.naturalWidth) {
+    noteAspect(pair, image);
+    reveal();
+  }
   const confidence = pair.confidence != null && `confiance ${Math.round(pair.confidence * 100)} %`;
   $("reason").textContent = [pair.reason, confidence, whereText(pair)]
     .filter(Boolean).join(" · ");
@@ -400,7 +413,7 @@ function reveal() {
   $("answer").classList.toggle("label", noText() || v.text === "");
   $("answerNote").textContent = v.note;
   fitImage();
-  if (pointsMode()) drawPoints(v.points, false);
+  if (pointsMode()) drawPoints(v.points, false, pair);
   else drawBoxes(boxesOf({ boxes: v.boxes }), boxesMode() ? "" : v.text, false);
 }
 
@@ -442,6 +455,8 @@ function makeZoom({ stage, content, lens, area, oneFinger, onGesture = () => {},
   const apply = () => {
     const { w, h } = area();
     zoom.s = Math.min(ZOOM_MAX, Math.max(minZoom(), zoom.s));
+    // Tout près de ×1 : ×1 exactement (loupe cachée, un doigt ne déplace plus le contenu).
+    if (Math.abs(zoom.s - 1) < 0.05) zoom.s = 1;
     // Zoomé, le contenu couvre le cadre ; dézoomé, il reste entier dans le cadre.
     zoom.x = Math.min(Math.max(0, w - w * zoom.s), Math.max(Math.min(0, w - w * zoom.s), zoom.x));
     zoom.y = Math.min(Math.max(0, h - h * zoom.s), Math.max(Math.min(0, h - h * zoom.s), zoom.y));
@@ -608,9 +623,10 @@ function drawBoxes(boxes, text, editable, marks = {}) {
 // Marge autour de l'image où se pose un point hors du cadre (fraction de l'image, de chaque côté).
 const MARGIN = 0.5;
 
-// Points d'une file `points`, normalisés, sur l'image : le contour dans l'ordre du tour et, une
-// fois tous posés, leur numéro. L'overlay couvre aussi la marge (points hors du cadre).
-function drawPoints(points, editable) {
+// Points d'une file `points` (paire `pair`), normalisés, sur l'image : le contour dans l'ordre du
+// tour et, une fois les 6 points du terrain posés, leur numéro. L'overlay couvre aussi la marge
+// (points hors du cadre).
+function drawPoints(points, editable, pair) {
   const image = $("image");
   const overlay = $("overlay");
   const w = image.clientWidth;
@@ -620,8 +636,7 @@ function drawPoints(points, editable) {
   overlay.style.width = `${w * (1 + 2 * MARGIN)}px`;
   overlay.style.height = `${h * (1 + 2 * MARGIN)}px`;
   overlay.classList.toggle("editable", editable);
-  const complete = points.length === pointsCount();
-  const shown = complete ? Polygon.orderCourt(points, imageAspect()) : Polygon.ring(points, imageAspect());
+  const { points: shown, numbered } = orderedPoints(points, pair);
   const at = (p) => [(p[0] + MARGIN) * w, (p[1] + MARGIN) * h];
   const line = shown.map((p) => at(p).map((v) => v.toFixed(1)).join(",")).join(" ");
   const shape = shown.length >= 3 ? "polygon" : "polyline";
@@ -632,7 +647,7 @@ function drawPoints(points, editable) {
     dot.className = "point";
     dot.style.left = `${x}px`;
     dot.style.top = `${y}px`;
-    if (complete) dot.innerHTML = `<span>${i + 1}</span>`;
+    if (numbered) dot.innerHTML = `<span>${i + 1}</span>`;
     overlay.appendChild(dot);
   });
 }
@@ -717,7 +732,10 @@ function renderList() {
     fillVerdicts(row.querySelector(".verdicts"), (verdict) => pickRow(row, verdict));
     rowGestures(row);
     const img = row.querySelector("img");
-    img.onload = () => fillRow(row);
+    img.onload = () => {
+      noteAspect(pair, img);
+      fillRow(row);
+    };
     img.src = pair.image;
     fillRow(row);
     list.appendChild(row);
@@ -852,8 +870,8 @@ function finishFix() {
 function fixChanges() {
   const { pair, value, boxes, points } = state.fix;
   if (pointsMode()) {
-    const before = savedPoints(pair.points || []);
-    const after = savedPoints(points);
+    const before = savedPoints(pair.points || [], pair);
+    const after = savedPoints(points, pair);
     const same = after.length === before.length
       && after.every((p, i) => Math.abs(p[0] - before[i][0]) < 0.0005 && Math.abs(p[1] - before[i][1]) < 0.0005);
     return same ? [] : ["points"];
@@ -909,8 +927,8 @@ function renderFix() {
 
 // Édition des points : Valider quand ils sont tous posés et différents de la proposition.
 function renderPointsFix() {
-  const { points } = state.fix;
-  drawPoints(points, true);
+  const { points, pair } = state.fix;
+  drawPoints(points, true, pair);
   $("trash").hidden = true;
   const n = points.length;
   const count = pointsCount();
@@ -1171,9 +1189,17 @@ function pointsGestures() {
   const release = (e) => {
     const fix = state.fix;
     if (!drag || !fix || !pointsMode()) return;
-    const { index, moved } = drag;
+    const { index, moved, start } = drag;
     drag = null;
-    if (moved || e.type !== "pointerup") return;
+    if (e.type !== "pointerup") {
+      // Geste interrompu (geste du système) : le point glissé revient à sa place.
+      if (moved && start) {
+        fix.points[index] = start;
+        renderFix();
+      }
+      return;
+    }
+    if (moved) return;
     const { p, w, h } = at(e);
     const now = Date.now();
     const last = fix.lastTap;
@@ -1183,7 +1209,7 @@ function pointsGestures() {
       if (last.added !== null) {
         // Double appui sur un bord : le point posé au premier appui va sur la ligne.
         const others = fix.points.filter((_, k) => k !== last.added);
-        const foot = Polygon.footOnSide(Polygon.ring(others, imageAspect()), last.p, GRAB, w, h);
+        const foot = Polygon.footOnSide(Polygon.ring(others, aspectOf(fix.pair)), last.p, GRAB, w, h);
         if (foot) fix.points[last.added] = foot.point;
       } else if (index !== null) {
         fix.points.splice(index, 1); // double appui sur un point : retiré
@@ -1220,7 +1246,7 @@ function fixWiring() {
     const { pair, value, boxes } = state.fix;
     const wrong = fixChanges();
     if (pointsMode()) {
-      judge(pair, "wrong", { points: savedPoints(state.fix.points), wrong });
+      judge(pair, "wrong", { points: savedPoints(state.fix.points, pair), wrong });
       return finishFix();
     }
     const correct = boxesMode() ? {} : { correct: value };

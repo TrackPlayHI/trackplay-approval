@@ -106,7 +106,7 @@ Le bouton ≡ / ▣ de la barre fait aussi passer d'un mode à l'autre. Faire d�
 
 File « boîtes seules » : en plus, `"kind": "boxes"`, `"object": "ballon"` et `"box_size"` (taille habituelle d'une boîte, en pixels) ; les paires n'ont pas de `text`, `boxes` peut être vide (rien à encadrer), `confidence` peut manquer (vignette sans proposition), `crop` (`[x0, y0, côté]` de la vignette dans l'image entière) et `where` sans `field`. Jugement : `boxes` validées ou corrigées (éventuellement vides), à `null` pour une vignette inutilisable ; pas de `correct`.
 
-File « points » : en plus, `"kind": "points"` et `"count": 6` (nombre de points à poser) ; chaque paire a `points`, les points proposés `[[x, y], …]`, **normalisés** (0 à 1 dans l'image, de −0,5 à 1,5 dans la marge pour un point hors du cadre), vide si le modèle n'a rien trouvé ; pas de `text`. Jugement : `points` validés ou corrigés, numérotés (6 points du terrain, 4 décimales), `"wrong": ["points"]` pour une correction.
+File « points » : en plus, `"kind": "points"`, `"count": 6` (nombre de points à poser) et `"aspect"` (largeur sur hauteur des images, 16:9 par défaut ; l'app mesure celle de chaque image chargée, pour numéroter en pixels) ; chaque paire a `points`, les points proposés `[[x, y], …]`, **normalisés** (0 à 1 dans l'image, de −0,5 à 1,5 dans la marge pour un point hors du cadre), vide si le modèle n'a rien trouvé ; pas de `text`. Jugement : `points` validés ou corrigés, numérotés (6 points du terrain, 4 décimales), `"wrong": ["points"]` pour une correction.
 
 `clip` : clip de contexte (MP4, H.264) dans `queues/` du dépôt des modèles, lu par l'API GitHub avec le jeton ; `where` : salle, champ et moment (secondes) dans la vidéo.
 
