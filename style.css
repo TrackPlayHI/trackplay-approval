@@ -58,6 +58,16 @@ body.boxes #top { flex: 1.6; }
 #trash { position: absolute; right: 0; bottom: -60px; z-index: 2; font-size: 26px; padding: 8px 12px;
   background: #2a2a2a; border: 2px solid transparent; }
 #trash.hot { background: var(--wrong); border-color: #fff; }
+/* Files « points » : marge grise autour de l'image (points hors du cadre, zoom arrière jusqu'à ×0,5),
+   contour dans l'ordre du tour et numéro de chaque point une fois tous posés. */
+body.points #stage { background: #555; }
+#overlay svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+#overlay svg polygon, #overlay svg polyline { fill: none; stroke: var(--accent); stroke-width: calc(2px / var(--z)); }
+#overlay .point { position: absolute; width: calc(14px / var(--z)); height: calc(14px / var(--z));
+  margin: calc(-7px / var(--z)) 0 0 calc(-7px / var(--z)); border-radius: 50%; background: var(--accent);
+  border: calc(2px / var(--z)) solid #fff; box-sizing: border-box; }
+#overlay .point span { position: absolute; left: calc(12px / var(--z)); top: calc(-22px / var(--z));
+  font-size: calc(16px / var(--z)); font-weight: 700; line-height: 1; color: #fff; text-shadow: 0 0 3px #000; }
 #overlay .box.selected { border-color: #fff; border-width: calc(3px / var(--z)); }
 #overlay .box.selected .corner { background: #fff; }
 #overlay .box.current span { text-decoration: underline; }
@@ -114,6 +124,7 @@ body.boxes #top { flex: 1.6; }
 .row, .row img, #image { user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
 .row .shot { position: relative; width: 50%; line-height: 0; }
 .row img { width: 100%; image-rendering: pixelated; border-radius: 4px; }
+.row .dot { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--accent); }
 .row .box { position: absolute; border: 2px solid var(--accent); border-radius: 2px; box-sizing: border-box;
   pointer-events: none; }
 .row { position: relative; }
@@ -136,7 +147,7 @@ dialog { background: #1c1c1c; color: var(--text); border: 0; border-radius: 12px
 dialog label { display: block; margin: 12px 0 4px; }
 dialog input, dialog select { width: 100%; font: inherit; padding: 8px; margin-top: 4px; border-radius: 6px;
   border: 1px solid #444; background: #111; color: var(--text); }
-dialog .row { display: flex; gap: 8px; justify-content: flex-end; background: none; padding: 0;
+dialog .row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; background: none; padding: 0;
   margin-top: 16px; }
 .small { font-size: 13px; color: var(--muted); }
 
